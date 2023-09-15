@@ -17,6 +17,8 @@ def search_artist_songs(artist_name):
         artist_name = artist_search["artist-list"][0]["name"]
         artist_id = artist_search["artist-list"][0]["id"]
 
+        append_link(artist_name)
+
         releases = musicbrainzngs.browse_releases(artist=artist_id)
 
         for release in releases["release-list"]:
@@ -39,7 +41,7 @@ def search_artist_songs(artist_name):
             for track in medium_list["track-list"]:
                 track_title = track["recording"]["title"]
 
-                youtube_search = VideosSearch(f"{artist_name} {track_title} audio")
+                youtube_search = VideosSearch(f"{artist_name} {track_title} MV")
                 results = youtube_search.result()['result']
 
                 if results:
@@ -47,11 +49,14 @@ def search_artist_songs(artist_name):
                     print(f"Track found: {track_title} - {artist_name}, Link: {youtube_link}")
 
                     try:
-                        download_video(youtube_link, artist_name)
-                        print("Download succeed! \n")
-                        append_link(youtube_link)
-                    except:
-                        print("The video wasn't downloaded.")
+                        if not is_link_already_saved(youtube_link):
+                            download_video(youtube_link, artist_name)
+                            print("Download succeed! \n")
+                            append_link(youtube_link)
+                        else:
+                            print("Skipping song as it is already downloaded \n")
+                    except Exception as e:
+                        print(e)
 
                 else:
                     print(f"Track: {track_title} by {artist_name}")
@@ -60,19 +65,18 @@ def search_artist_songs(artist_name):
     except musicbrainzngs.WebServiceError as exc:
         print(f"MusicBrainz API error: {exc}")
 
-links_file = "data/links"
-
 def is_link_already_saved(link):
-    if os.path.isfile(file):
-        with open(file, "r") as file:
+    if os.path.isfile("data/links.txt"):
+        with open("data/links.txt", "r") as file:
             return link in file.read()
     return False
 
 def append_link(link):
-    with open(file, "a") as file:
+    with open("data/links.txt", "a") as file:
         file.write(link + "\n")
 
 if __name__ == "__main__":
-    artist_name = input("Enter the artist's name: ")
-    print("\n")
-    search_artist_songs(artist_name)
+    while True:
+        artist_name = input("Enter the artist's name: ")
+        search_artist_songs(artist_name)
+        

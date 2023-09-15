@@ -1,13 +1,16 @@
+import os
 import pytube
 
 def download_video(video_url, save_location, audio_only=True):
-    print(video_url)
     yt = pytube.YouTube(video_url)
-    print(yt.age_restricted)
-    video_title = yt.title
+    video_title = yt.title.replace("/", "_").replace("|", "_")
+
+    path = f"data/audio/{save_location}"
+    if not os.path.exists(path):
+        os.makedirs(path)
 
     audio_stream = yt.streams.filter(only_audio=audio_only, file_extension='mp4').first()
-    audio_stream.download(filename=f"data/audio/{save_location}/{video_title}.mp4")
+    audio_stream.download(filename=f"{path}/{video_title}.mp4")
 
     return video_title
 
