@@ -4,7 +4,6 @@ from youtubesearchpython import VideosSearch
 
 from downloader import download_video
 
-# Set your MusicBrainz API credentials
 musicbrainzngs.set_useragent("MusicBrainzAPI", "0.1", contact="Somniaquia@gmail.com")
 
 def search_artist_songs(artist_name):
@@ -41,7 +40,7 @@ def search_artist_songs(artist_name):
             for track in medium_list["track-list"]:
                 track_title = track["recording"]["title"]
 
-                youtube_search = VideosSearch(f"{artist_name} {track_title} MV")
+                youtube_search = VideosSearch(f"{artist_name} {track_title} original")
                 results = youtube_search.result()['result']
 
                 if results:
@@ -77,6 +76,6 @@ def append_link(link):
 
 if __name__ == "__main__":
     while True:
-        artist_name = input("Enter the artist's name: ")
-        search_artist_songs(artist_name)
-        
+        artist_names = input("Enter the artists' names to download albums of (seperated with commas): ")
+        for name in artist_names.split(","):
+            search_artist_songs(name)

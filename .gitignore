@@ -1,2 +1,3 @@
 *.docx
-data/audio
+*.wav
+*.mp4
