@@ -21,11 +21,12 @@ def convert_and_resample(root_folder, target_sample_rate=8000):
                 if os.path.isfile(dst_filepath):
                     continue
 
-                audio = AudioSegment.from_file(src_filepath, format="mp4")
-                audio.export(dst_filepath, format="wav") 
-
-                resample_audio(dst_filepath, dst_filepath, target_sample_rate)
-
-                os.remove(src_filepath) 
+                try:
+                    audio = AudioSegment.from_file(src_filepath, format="mp4")
+                    audio.export(dst_filepath, format="wav") 
+                    resample_audio(dst_filepath, dst_filepath, target_sample_rate)
+                    print("Saved to " + dst_filepath)
+                except Exception as e:
+                    pass
 
 convert_and_resample('data\\raw', 16000)

@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch.utils.data import *
+import torchaudio
 
 class MusicDataset(Dataset):
     def __init__(self, files, sample_length):
@@ -12,13 +13,19 @@ class MusicDataset(Dataset):
     def __len__(self):
         return len(self.files)
 
-    def __getitem__(self, idx):
-        # Load file, convert it to tensor and normalize it
-        waveform = load_and_normalize(self.files[idx])
+    def load_and_normalize(filename):
+        waveform, sample_rate = torchaudio.load(filename)
+        
+        # Normalize to have values between -1 and 1
+        waveform = torch.mean(waveform, dim=0)
+        waveform = waveform / torch.max(torch.abs(waveform))
 
-        # If waveform is smaller than the required sample length,
-        # we pad it with zeros at the end
-        if waveform.shape[0] < self.sample_length:
+        return waveform
+
+    def __getitem__(self, idx):
+        waveform = self.load_and_normalize(self.files[idx])
+
+        if waveform.shape[0] < self.sample_length: # zero-padding
             waveform = torch.nn.functional.pad(waveform, (0, self.sample_length - waveform.shape[0]))
 
         return waveform[:self.sample_length]
@@ -37,6 +44,7 @@ class TransformerModel(nn.Module):
 
 if __name__ == "__main__":
     loss = nn.MSELoss()
+    model = TransformerModel()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
     for epoch in range(n_epochs):

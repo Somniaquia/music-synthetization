@@ -1,10 +1,25 @@
 import os
+import re
+import pytube
 import musicbrainzngs
 from youtubesearchpython import VideosSearch
 
-from downloader import download_video
-
 musicbrainzngs.set_useragent("MusicBrainzAPI", "0.1", contact="Somniaquia@gmail.com")
+
+def download_video(video_url, save_location, audio_only=True):
+    yt = pytube.YouTube(video_url)
+    # video_title = re.sub(r'[^\x00-\x7F]', '_', yt.title)
+    video_title = re.sub(r'[\x00-\x1F\x7F-\x9F\/:?*<>|]', '_', yt.title)
+    video_title = re.sub(r'_+', '_', video_title)
+
+    path = f"data/raw/{save_location}"
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+    audio_stream = yt.streams.filter(only_audio=audio_only, file_extension='mp4').first()
+    audio_stream.download(filename=f"{path}/{video_title}.mp4")
+
+    return video_title
 
 def search_artist_songs(artist_name):
     try:
