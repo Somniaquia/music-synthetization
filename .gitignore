@@ -1,4 +1,4 @@
 *.docx
 *.wav
 *.mp4
-scripts\stable-diffusion
+models/stable-diffusion

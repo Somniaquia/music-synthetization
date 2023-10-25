@@ -1,8 +1,8 @@
 # Code taken from https://github.com/CompVis/stable-diffusion.git
 # for personal learning purposes
 
-import math
 from einops import rearrange
+import math
 import numpy as np
 import torch
 import torch.nn as nn
