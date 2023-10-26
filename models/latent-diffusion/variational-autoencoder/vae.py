@@ -378,7 +378,7 @@ class VAE(pl.LightningModule):
         self.decoder = Decoder()
         self.loss = CombinedAudioLoss(alpha=0.5)
         self.lossconfig = {}
-        self.quant_conv = nn.Conv1d(2*16, 2*embed_dim, 1)
+        self.quant_conv = nn.Conv1d(512, 128, 1)
         self.post_quant_conv = nn.Conv1d(embed_dim, 16, 1)
         self.embed_dim = embed_dim
         self.learning_rate = learning_rate
@@ -455,7 +455,7 @@ if __name__ == "__main__":
 
     model = VAE()
 
-    train_set = MusicDataset(root_dir='data\\16kHz_8bit')
+    train_set = MusicDataset(root_dir=input("Data direrctory: "))
 
     train_loader = DataLoader(train_set, batch_size=1, shuffle=True, num_workers=16, collate_fn=collate_fn)
     val_loader = DataLoader(train_set, batch_size=1, num_workers=16, collate_fn=collate_fn)
