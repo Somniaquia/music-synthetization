@@ -433,7 +433,7 @@ class VAE(pl.LightningModule):
         reconstructions, posterior = self(batch)
 
         # Calculate the combined audio loss
-        loss = self.combined_audio_loss(reconstructions, batch)
+        loss = self.loss(reconstructions, batch)
         self.log('train_loss', loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
         return loss
         
@@ -441,7 +441,7 @@ class VAE(pl.LightningModule):
         reconstructions, _ = self(batch)
 
         # Calculate the combined audio loss
-        val_loss = self.combined_audio_loss(reconstructions, batch)
+        val_loss = self.loss(reconstructions, batch)
         self.log('val_loss', val_loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
         return val_loss
     
