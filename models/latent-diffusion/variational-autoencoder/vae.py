@@ -248,7 +248,7 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
     def __init__(self, ch=128, out_ch=3, ch_mult=(1, 1, 2, 2, 4), num_res_blocks=2, 
                  attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=1, 
-                 resolution=4800000, z_channels=18750, give_pre_end=False, tanh_out=False, **ignorekwargs):
+                 resolution=4800000, z_channels=512, give_pre_end=False, tanh_out=False, **ignorekwargs):
         super().__init__()
         self.ch = ch
         self.temb_ch = 0
@@ -379,7 +379,7 @@ class VAE(pl.LightningModule):
         self.loss = CombinedAudioLoss(alpha=0.5)
         self.lossconfig = {}
         self.quant_conv = nn.Conv1d(512, 128, 1)
-        self.post_quant_conv = nn.Conv1d(embed_dim, 16, 1)
+        self.post_quant_conv = nn.Conv1d(128, 512, 1)
         self.embed_dim = embed_dim
         self.learning_rate = learning_rate
 
