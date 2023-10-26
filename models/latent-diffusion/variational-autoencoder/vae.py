@@ -182,8 +182,8 @@ class DiagonalGaussianDistribution(object):
     
 class Encoder(nn.Module):
     def __init__(self, ch=128, out_ch=3, ch_mult=(1, 1, 2, 2, 4), num_res_blocks=2,
-                 attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=3,
-                 resolution=256, z_channels=16, give_pre_end=False, tanh_out=False, **ignorekwargs):
+                 attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=1,
+                 resolution=4800000, z_channels=18750, give_pre_end=False, tanh_out=False, **ignorekwargs):
         super().__init__()
         self.ch = ch
         self.t_emb_ch = 0
@@ -247,8 +247,8 @@ class Encoder(nn.Module):
     
 class Decoder(nn.Module):
     def __init__(self, ch=128, out_ch=3, ch_mult=(1, 1, 2, 2, 4), num_res_blocks=2, 
-                 attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=3, 
-                 resolution=256, z_channels=16, give_pre_end=False, tanh_out=False, **ignorekwargs):
+                 attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=1, 
+                 resolution=4800000, z_channels=18750, give_pre_end=False, tanh_out=False, **ignorekwargs):
         super().__init__()
         self.ch = ch
         self.temb_ch = 0
@@ -263,7 +263,7 @@ class Decoder(nn.Module):
         in_ch_mult = (1,) + tuple(ch_mult)
         block_in = ch * ch_mult[self.num_resolutions - 1]
         curr_res = resolution // 2**(self.num_resolutions - 1)
-        self.z_shape = (1, z_channels, curr_res)
+        self.z_shape = (1, z_channels)
         print(f"Working with z of shape {self.z_shape} dimensions.")
 
         self.conv_in = nn.Conv1d(z_channels, block_in, kernel_size=3, stride=1, padding=1)
@@ -412,7 +412,7 @@ class VAE(pl.LightningModule):
         dec = self.decoder(z)
         return dec
 
-    def forward(self, x, sample_posterior):
+    def forward(self, x, sample_posterior=True):
         posterior = self.encode(x)
         if sample_posterior:
             z = posterior.sample()
@@ -421,12 +421,6 @@ class VAE(pl.LightningModule):
         dec = self.decode(z)
         # Return the reconstruction and the posterior
         return dec, posterior
-    
-    def get_input(self, batch, k):
-        x = batch[k]
-        if len(x.shape) == 3:
-            x = x[..., None]
-        return x.float()
 
     # A mandatory function to define what optimizers to use in pytorch lightning.
     # Returns the optimizers and optionally rate schedulers used in training
@@ -435,21 +429,19 @@ class VAE(pl.LightningModule):
         opt_ae = torch.optim.Adam(self.parameters(), lr=lr, betas=(0.5, 0.9))
         return opt_ae
 
-    def training_step(self, batch, batch_idx, optimizer_idx):
-        inputs = self.get_input(batch, self.image_key)
-        reconstructions, posterior = self(inputs)
+    def training_step(self, batch, batch_idx):
+        reconstructions, posterior = self(batch)
 
         # Calculate the combined audio loss
-        loss = self.combined_audio_loss(reconstructions, inputs)
+        loss = self.combined_audio_loss(reconstructions, batch)
         self.log('train_loss', loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
         return loss
         
     def validation_step(self, batch, batch_idx):
-        inputs = self.get_input(batch, self.image_key)
-        reconstructions, _ = self(inputs)
+        reconstructions, _ = self(batch)
 
         # Calculate the combined audio loss
-        val_loss = self.combined_audio_loss(reconstructions, inputs)
+        val_loss = self.combined_audio_loss(reconstructions, batch)
         self.log('val_loss', val_loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
         return val_loss
     
@@ -457,14 +449,19 @@ class VAE(pl.LightningModule):
         return self.decoder.conv_out.weight
     
 if __name__ == "__main__":
-    from music_dataset import MusicDataset
+    from music_dataset import MusicDataset, collate_fn
     from torch.utils.data import DataLoader
+    from torch.nn.utils.rnn import pad_sequence
 
     model = VAE()
 
-    train_set = MusicDataset(root_dir='data/raw')
-    train_loader = DataLoader(train_set, batch_size=4, shuffle=True, num_workers=16)
-    val_loader = DataLoader(train_set, batch_size=16, num_workers=16)
+    train_set = MusicDataset(root_dir='data\\16kHz_8bit')
+
+    train_loader = DataLoader(train_set, batch_size=1, shuffle=True, num_workers=16, collate_fn=collate_fn)
+    val_loader = DataLoader(train_set, batch_size=1, num_workers=16, collate_fn=collate_fn)
+    for batch in train_loader:
+        print("Batch shape:", batch.shape)
+        break
 
     trainer = pl.Trainer(max_epochs=100, precision='16-mixed')
     trainer.fit(model, train_loader, val_loader)

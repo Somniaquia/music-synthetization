@@ -20,9 +20,9 @@ def convert_and_resample(root_folder, target_sample_rate=8000, bit_depth=16):
                     audio = AudioSegment.from_file(src_filepath, format="mp4")
                     audio = audio.set_frame_rate(target_sample_rate)
                     audio = audio.set_sample_width(bit_depth // 8)
-                    audio.export(dst_filepath, format="mp4", codec="libvo_aacenc") 
+                    audio.export(dst_filepath.replace('mp4', 'wav'), format="wav") 
                     print("Saved to " + dst_filepath)
                 except Exception as e:
                     print("Failed to process {}: {}".format(src_filepath, str(e)))
 
-convert_and_resample('data\\raw', 8000, 8)
+convert_and_resample('data\\raw\\ぬゆり', 16000, 8)

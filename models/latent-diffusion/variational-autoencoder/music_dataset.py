@@ -3,6 +3,13 @@ import torchaudio
 import torch
 import os
 
+def collate_fn(batch):
+    max_len = 4800000
+    mono_batch = [x.mean(dim=0, keepdim=True) for x in batch]
+    padded_batch = [torch.nn.functional.pad(x, (0, max_len - x.size(-1))) for x in mono_batch]
+    
+    return torch.stack(padded_batch, dim=0)
+
 class MusicDataset(Dataset):
     def __init__(self, root_dir, transform=None):
         """
@@ -19,7 +26,7 @@ class MusicDataset(Dataset):
             artist_path = os.path.join(root_dir, artist)
             if os.path.isdir(artist_path):
                 for file in os.listdir(artist_path):
-                    if file.lower().endswith(('.mp4', '.aac')):
+                    if file.lower().endswith(('.wav')):
                         self.file_paths.append(os.path.join(artist_path, file))
 
     def __len__(self):
@@ -35,5 +42,4 @@ class MusicDataset(Dataset):
         if self.transform:
             waveform = self.transform(waveform)
 
-        sample = {'waveform': waveform, 'sample_rate': sample_rate, 'audio_path': audio_path}
-        return sample
+        return waveform
