@@ -38,7 +38,7 @@ class Upsample(nn.Module):
             self.conv = nn.Conv1d(in_channels, in_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, x):
-        x = F.interpolate(x, scale_factor=2.0, mode='nearest')
+        x = F.interpolate(x, scale_factor=2.0, mode='linear')  # Changed to 'linear' for smoother results
         if self.with_conv:
             x = self.conv(x)
         return x
@@ -48,12 +48,10 @@ class Downsample(nn.Module):
         super().__init__()
         self.with_conv = with_conv
         if self.with_conv:
-            self.conv = nn.Conv1d(in_channels, in_channels, kernel_size=3, stride=2, padding=0)
-        
+            self.conv = nn.Conv1d(in_channels, in_channels, kernel_size=4, stride=2, padding=1)
+
     def forward(self, x):
         if self.with_conv:
-            pad = (0, 1)
-            x = F.pad(x, pad, mode='constant', value=0)
             x = self.conv(x)
         else:
             x = F.avg_pool1d(x, kernel_size=2, stride=2)
@@ -61,22 +59,22 @@ class Downsample(nn.Module):
 
 
 class ResnetBlock(nn.Module):
-    def __init__(self, *, in_channels, out_channels=None, conv_shortcut=False, dropout, t_emb_channls=512):
+    def __init__(self, *, in_channels, out_channels=None, conv_shortcut=False, dropout, t_emb_channels=512):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = in_channels if out_channels is None else out_channels
         out_channels = self.out_channels
         self.use_conv_shortcut = conv_shortcut
 
-        self.norm1 = (in_channels)
+        self.norm1 = nn.LayerNorm(in_channels)
         self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
 
-        if t_emb_channls > 0:
-            self.t_emb_proj = nn.Linear(t_emb_channls, out_channels)
-            
-        self.norm2 = Normalize(out_channels)
+        if t_emb_channels > 0:
+            self.t_emb_proj = nn.Linear(t_emb_channels, out_channels)
+        
+        self.norm2 = nn.LayerNorm(out_channels)
         self.dropout = nn.Dropout(dropout)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         
         if self.in_channels != self.out_channels:
             if self.use_conv_shortcut:
@@ -88,23 +86,23 @@ class ResnetBlock(nn.Module):
     def forward(self, x, t_emb):
         h = x
 
-        h = self.norm1(h)
-        h = nn.SiLU(h)
+        h = self.norm1(h.transpose(1, 2)).transpose(1, 2)
+        h = nn.SiLU()(h)
         h = self.conv1(h)
 
         # Project t_emb to the same dimensionality as the output of the first convolutional layer, add to the result
         if t_emb is not None:
             # The original network processed 4D image tensors (b, h, w, c) but in case of 2D audio tensors (b, s) dimensionality augmentation is unnecessary
             # h = h + self.t_emb_proj(nn.SiLU(t_emb))[:,:,None,None]
-            h = h + self.t_emb_proj(nn.SiLU(t_emb))
+            h = h + self.t_emb_proj(nn.SiLU()(t_emb))[:, :, None]
 
-        h = self.norm2(h)
-        h = nn.SiLU(h)
+        h = self.norm2(h.transpose(1, 2)).transpose(1, 2)
+        h = nn.SiLU()(h)
         h = self.dropout(h)
         h = self.conv2(h)
 
         if self.in_channels != self.out_channels:
-            if self.use_conv_chortcut:
+            if self.use_conv_shortcut:
                 x = self.conv_shortcut(x)
             else:
                 x = self.nin_shortcut(x)
@@ -117,17 +115,17 @@ class LinearAttention(nn.Module):
         super().__init__()
         self.heads = heads
         hidden_dim = dim_head * heads
-        self.to_qkv = nn.Conv2d(dim, hidden_dim * 3, 1, bias = False)
-        self.to_out = nn.Conv2d(hidden_dim, dim, 1)
+        self.to_qkv = nn.Conv1d(dim, hidden_dim * 3, 1, bias = False)
+        self.to_out = nn.Conv1d(hidden_dim, dim, 1)
 
     def forward(self, x):
-        b, c, h, w = x.shape
+        b, c, l = x.shape
         qkv = self.to_qkv(x)
-        q, k, v = rearrange(qkv, 'b (qkv heads c) h w -> qkv b heads c (h w)', heads = self.heads, qkv=3)
-        k = k.softmax(dim=-1)  
+        q, k, v = rearrange(qkv, 'b (qkv heads c) l -> qkv b heads c l', heads=self.heads, qkv=3)
+        k = k.softmax(dim=-1)
         context = torch.einsum('bhdn,bhen->bhde', k, v)
         out = torch.einsum('bhde,bhdn->bhen', context, q)
-        out = rearrange(out, 'b heads c (h w) -> b (heads c) h w', heads=self.heads, h=h, w=w)
+        out = rearrange(out, 'b heads c l -> b (heads c) l', heads=self.heads, l=l)
         return self.to_out(out)
 
 # Gaussian Distribution with a diagonal covariance matrix
@@ -160,21 +158,16 @@ class DiagonalGaussianDistribution(object):
     # If the other distribution is not provided, this calculates KL Divergence with a normal distribution N(1, 0)
     def kl(self, other=None):
         if self.deterministic:
-            return torch.Tensor([0.])
+            return torch.tensor([0.], device=self.parameters.device)
         else:
             if other is None:
-                return 0.5 * torch.sum(torch.pow(self.mean, 2)
-                                       + self.var - 1.0 - self.logvar,
-                                       dim=[1, 2, 3])
+                return 0.5 * torch.sum(torch.pow(self.mean, 2) + self.var - 1.0 - self.logvar, dim=[1])
             else:
-                return 0.5 * torch.sum(
-                    torch.pow(self.mean - other.mean, 2) / other.var
-                    + self.var / other.var - 1.0 - self.logvar + other.logvar,
-                    dim=[1, 2, 3])
+                return 0.5 * torch.sum(torch.pow(self.mean - other.mean, 2) / other.var + self.var / other.var - 1.0 - self.logvar + other.logvar, dim=[1])
             
     # Calculate the negative log-likelihood of a 'sample' under the distribution.
     # Common for loss functions of generative models
-    def nll(self, sample, dims=[1, 2, 3]):
+    def nll(self, sample, dims=[1]):
         if self.deterministic:
             return torch.Tensor([0.])
         logtwopi = np.log(2.0 * np.pi)
@@ -186,8 +179,8 @@ class DiagonalGaussianDistribution(object):
         return self.mean
     
 class Encoder(nn.Module):
-    def __init__(self, ch=128, out_ch=3, ch_mult=(1, 1, 2, 2, 4), num_res_blocks=2, 
-                 attn_resolutions=16, dropout=0.0, resamp_with_conv=True, in_channels=3, 
+    def __init__(self, ch=128, out_ch=3, ch_mult=(1, 1, 2, 2, 4), num_res_blocks=2,
+                 attn_resolutions=16, dropout=0.0, resamp_with_conv=True, in_channels=3,
                  resolution=256, z_channels=16, give_pre_end=False, tanh_out=False, **ignorekwargs):
         super().__init__()
         self.ch = ch
@@ -209,17 +202,15 @@ class Encoder(nn.Module):
         for i_level in range(self.num_resolutions):
             block = nn.ModuleList()
             attn = nn.ModuleList()
-            block_in = ch*in_ch_mult[i_level]
-            block_out = ch*ch_mult[i_level]
+            block_in = ch * in_ch_mult[i_level]
+            block_out = ch * ch_mult[i_level]
             for i_block in range(self.num_res_blocks):
-                block.append(ResnetBlock(in_channels=block_in,
-                                         out_channels=block_out,
-                                         t_emb_channls=self.t_emb_ch,
-                                         dropout=dropout))
+                block.append(ResnetBlock(in_channels=block_in, out_channels=block_out, t_emb_channels=self.t_emb_ch, dropout=dropout))
                 block_in = block_out
                 if curr_res in attn_resolutions:
-                    attn.append(make_attn(block_in))
-            down = nn.Module()
+                    attn.append(LinearAttention(dim=block_in))
+
+            down = nn.ModuleList()
             down.block = block
             down.attn = attn
             if i_level != self.num_resolutions-1:
@@ -229,10 +220,7 @@ class Encoder(nn.Module):
 
         # Middle Layers
         self.mid = nn.Module()
-        self.mid.block_1 = ResnetBlock(in_channels=block_in,
-                                       out_channels=block_in,
-                                       t_emb_channels=self.t_emb_ch,
-                                       dropout=dropout)
+        self.mid.block_1 = ResnetBlock(in_channels=block_in, out_channels=block_in, t_emb_channels=self.t_emb_ch, dropout=dropout)
 
 
     def forward(self, input):
@@ -243,7 +231,6 @@ class Decoder(nn.Module):
                  attn_resolutions=16, dropout=0.0, resamp_with_conv=True, in_channels=3, 
                  resolution=256, z_channels=16, give_pre_end=False, tanh_out=False, **ignorekwargs):
         super().__init__()
-        if use_linear_attn: attn_type = "linear"
         self.ch = ch
         self.temb_ch = 0
         self.num_resolutions = len(ch_mult)
@@ -253,62 +240,43 @@ class Decoder(nn.Module):
         self.give_pre_end = give_pre_end
         self.tanh_out = tanh_out
 
-        # compute in_ch_mult, block_in and curr_res at lowest res
-        in_ch_mult = (1,)+tuple(ch_mult)
-        block_in = ch*ch_mult[self.num_resolutions-1]
-        curr_res = resolution // 2**(self.num_resolutions-1)
-        self.z_shape = (1,z_channels,curr_res,curr_res)
+        # Compute in_ch_mult, block_in, and curr_res at lowest res
+        in_ch_mult = (1,) + tuple(ch_mult)
+        block_in = ch * ch_mult[self.num_resolutions - 1]
+        curr_res = resolution // 2**(self.num_resolutions - 1)
+        self.z_shape = (1, z_channels, curr_res)
         print("Working with z of shape {} = {} dimensions.".format(
             self.z_shape, np.prod(self.z_shape)))
 
-        # z to block_in
-        self.conv_in = torch.nn.Conv2d(z_channels,
-                                       block_in,
-                                       kernel_size=3,
-                                       stride=1,
-                                       padding=1)
+        self.conv_in = nn.Conv1d(z_channels, block_in, kernel_size=3, stride=1, padding=1)
 
         # middle
         self.mid = nn.Module()
-        self.mid.block_1 = ResnetBlock(in_channels=block_in,
-                                       out_channels=block_in,
-                                       temb_channels=self.temb_ch,
-                                       dropout=dropout)
-        self.mid.attn_1 = make_attn(block_in, attn_type=attn_type)
-        self.mid.block_2 = ResnetBlock(in_channels=block_in,
-                                       out_channels=block_in,
-                                       temb_channels=self.temb_ch,
-                                       dropout=dropout)
+        self.mid.block_1 = ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout)
+        self.mid.attn_1 = LinearAttention(dim=block_in)
+        self.mid.block_2 = ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout)
 
         # upsampling
         self.up = nn.ModuleList()
         for i_level in reversed(range(self.num_resolutions)):
             block = nn.ModuleList()
             attn = nn.ModuleList()
-            block_out = ch*ch_mult[i_level]
-            for i_block in range(self.num_res_blocks+1):
-                block.append(ResnetBlock(in_channels=block_in,
-                                         out_channels=block_out,
-                                         temb_channels=self.temb_ch,
-                                         dropout=dropout))
+            block_out = ch * ch_mult[i_level]
+            for i_block in range(self.num_res_blocks + 1):
+                block.append(ResnetBlock(in_channels=block_in, out_channels=block_out, temb_channels=self.temb_ch, dropout=dropout))
                 block_in = block_out
                 if curr_res in attn_resolutions:
-                    attn.append(make_attn(block_in, attn_type=attn_type))
+                    attn.append(LinearAttention(dim=block_in))
             up = nn.Module()
             up.block = block
             up.attn = attn
             if i_level != 0:
                 up.upsample = Upsample(block_in, resamp_with_conv)
                 curr_res = curr_res * 2
-            self.up.insert(0, up) # prepend to get consistent order
+            self.up.insert(0, up)
 
-        # end
-        self.norm_out = Normalize(block_in)
-        self.conv_out = torch.nn.Conv1d(block_in,
-                                        out_ch,
-                                        kernel_size=3,
-                                        stride=1,
-                                        padding=1)
+        self.norm_out = nn.LayerNorm(block_in)
+        self.conv_out = nn.Conv1d(block_in, out_ch, kernel_size=3, stride=1, padding=1)
          
 
     def forward(self, z):
@@ -316,28 +284,37 @@ class Decoder(nn.Module):
         t_emb = None
 
         h = self.conv_in(z)
-
         h = self.mid.block_1(h, t_emb)
         h = self.mid.attn_1(h)
         h = self.mid.block_2(h, t_emb)
 
         for i_level in reversed(range(self.num_resolutions)):
-            for i_block in range(self.num_res_blocks+1):
+            for i_block in range(self.num_res_blocks + 1):
                 h = self.up[i_level].block[i_block](h, t_emb)
                 if len(self.up[i_level].attn) > 0:
                     h = self.up[i_level].attn[i_block](h)
             if i_level != 0:
                 h = self.up[i_level].upsample(h)
 
-        if self.give_pre_nd:
+        if self.give_pre_end:
             return h
         
-        h = self.norm_out(h)
-        h = nn.SiLU(h)
+        h = self.norm_out(h.transpose(1, 2)).transpose(1, 2)
+        h = nn.SiLU()(h)
         h = self.conv_out(h)
         if self.tanh_out:
             h = torch.tanh(h)
         return h
+
+
+class PerceptualLoss:
+    def __init__(self):
+        pass
+
+    def __call__(self, inputs, reconstructions, posterior, optimizer_idx, global_step, last_layer, split):
+        rec_loss = nn.MSELoss()(reconstructions, inputs)
+        return rec_loss, {'rec_loss': rec_loss}
+
 
 
 class VAE(pl.LightningModule):
@@ -345,23 +322,18 @@ class VAE(pl.LightningModule):
                  embed_dim,
                  ckpt_path=None,
                  ignore_keys=[],
-                 image_key='image',
-                 colorize_nlabels=None,
-                 monitor=None
+                 monitor=None,
+                 learning_rate=1e-3
                  ):
         super().__init__()
-        self.image_key = image_key
-        # Double asterisk means unpacking a dictionary for function parameters
-        # A single asterisk means unpacking an array, in turn 
         self.encoder = Encoder()
         self.decoder = Decoder()
-        self.loss = instantiate_from_config(lossconfig)
+        self.loss = PerceptualLoss()
+        self.lossconfig = {}
         self.quant_conv = nn.Conv1d(2*16, 2*embed_dim, 1)
         self.post_quant_conv = nn.Conv1d(embed_dim, 16, 1)
         self.embed_dim = embed_dim
-        if colorize_nlabels is not None:
-            assert type(colorize_nlabels) == int
-            self.register_buffer('colorize', torch.randn(3, colorize_nlabels, 1, 1))
+        self.learning_rate = learning_rate
 
         if monitor is not None:
             self.monitor = monitor
@@ -393,7 +365,7 @@ class VAE(pl.LightningModule):
         return dec
 
     def forward(self, x, sample_posterior):
-        posterior = self.encode(input)
+        posterior = self.encode(x)
         if sample_posterior:
             z = posterior.sample()
         else:
@@ -428,18 +400,14 @@ class VAE(pl.LightningModule):
         # optimizer_idx indicates there are multiple optimizers
         if optimizer_idx == 0:
             # Calculate the loss of Encoder and the Decoder
-            aeloss, log_dict_ae = self.loss(inputs, reconstructions, posterior, 
-                                            optimizer_idx, self.global_step,
-                                            last_layer=self.get_last_layer(), split='train')
+            aeloss, log_dict_ae = self.loss(inputs, reconstructions, posterior, optimizer_idx, self.global_step, last_layer=self.get_last_layer(), split='train')
             self.log('aeloss', aeloss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
             self.log_dict(log_dict_ae, prog_bar=False, logger=True, on_step=True, on_epoch=False)
             return aeloss
         
         if optimizer_idx == 1:
             # Train the Discriminator
-            discloss, log_dict_disc = self.loss(inputs, reconstructions, posterior,
-                                                optimizer_idx, self.global_step,
-                                                last_layer=self.get_last_layer(), split='train')
+            discloss, log_dict_disc = self.loss(inputs, reconstructions, posterior, optimizer_idx, self.global_step, last_layer=self.get_last_layer(), split='train')
             self.log('discloss', discloss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
             self.log_dict(log_dict_disc, prog_bar=False, logger=True, on_step=True, on_epoch=False)
             return discloss
@@ -451,14 +419,18 @@ class VAE(pl.LightningModule):
         aeloss, log_dict_ae = self.loss(inputs, reconstructions, posterior, 0, self.global_step,
                                         last_layer=self.get_last_layer(), split="val")
 
-        discloss, log_dict_disc = self.loss(inputs, reconstructions, posterior, 1, self.global_step,
-                                            last_layer=self.get_last_layer(), split="val")
-
         self.log("val/rec_loss", log_dict_ae["val/rec_loss"])
         self.log_dict(log_dict_ae)
-        self.log_dict(log_dict_disc)
-        return self.log_dict
+        return aeloss
     
     def get_last_layer(self):
         return self.decoder.conv_out.weight
     
+if __name__ == "__main__":
+    model = VAE()
+
+    from torch.utils.data import DataLoader
+    train_loader = DataLoader(dataset, batch_size=32, shuffle=True)
+
+    trainer = pl.Trainer(max_epochs=100)
+    trainer.fit(model, train_loader)
