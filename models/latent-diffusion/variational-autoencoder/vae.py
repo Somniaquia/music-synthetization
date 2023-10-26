@@ -9,6 +9,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
 
+torch.set_float32_matmul_precision('medium')
+
 def get_timestep_embedding(timesteps, embedding_dim):
     """
     This matches the implementation in Denoising Diffusion Probabilistic Models (https://arxiv.org/abs/2006.11239):
@@ -180,7 +182,7 @@ class DiagonalGaussianDistribution(object):
     
 class Encoder(nn.Module):
     def __init__(self, ch=128, out_ch=3, ch_mult=(1, 1, 2, 2, 4), num_res_blocks=2,
-                 attn_resolutions=16, dropout=0.0, resamp_with_conv=True, in_channels=3,
+                 attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=3,
                  resolution=256, z_channels=16, give_pre_end=False, tanh_out=False, **ignorekwargs):
         super().__init__()
         self.ch = ch
@@ -194,10 +196,10 @@ class Encoder(nn.Module):
         # Downsampling layers
         self.conv_in = nn.Conv1d(in_channels, self.ch, kernel_size=3, stride=1, padding=1)
 
-        curr_res = attn_resolutions
+        curr_res = self.resolution
         in_ch_mult = (1,) + tuple(ch_mult)
         self.in_ch_mult = in_ch_mult
-        self.down = nn.ModuleList
+        self.down = nn.ModuleList()
 
         for i_level in range(self.num_resolutions):
             block = nn.ModuleList()
@@ -210,7 +212,7 @@ class Encoder(nn.Module):
                 if curr_res in attn_resolutions:
                     attn.append(LinearAttention(dim=block_in))
 
-            down = nn.ModuleList()
+            down = nn.Module()
             down.block = block
             down.attn = attn
             if i_level != self.num_resolutions-1:
@@ -223,12 +225,29 @@ class Encoder(nn.Module):
         self.mid.block_1 = ResnetBlock(in_channels=block_in, out_channels=block_in, t_emb_channels=self.t_emb_ch, dropout=dropout)
 
 
-    def forward(self, input):
-        pass
+    def forward(self, x, t_emb=None):
+        # Initial convolution
+        h = self.conv_in(x)
+
+        # Downsampling layers
+        for i_level in range(self.num_resolutions):
+            for i_block in range(self.num_res_blocks):
+                h = self.down[i_level].block[i_block](h, t_emb)
+
+                if len(self.down[i_level].attn) > 0:
+                    h = self.down[i_level].attn[i_block](h)
+
+            if i_level != self.num_resolutions - 1:
+                h = self.down[i_level].downsample(h)
+
+        # Middle layers
+        h = self.mid.block_1(h, t_emb)
+
+        return h
     
 class Decoder(nn.Module):
     def __init__(self, ch=128, out_ch=3, ch_mult=(1, 1, 2, 2, 4), num_res_blocks=2, 
-                 attn_resolutions=16, dropout=0.0, resamp_with_conv=True, in_channels=3, 
+                 attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=3, 
                  resolution=256, z_channels=16, give_pre_end=False, tanh_out=False, **ignorekwargs):
         super().__init__()
         self.ch = ch
@@ -245,16 +264,15 @@ class Decoder(nn.Module):
         block_in = ch * ch_mult[self.num_resolutions - 1]
         curr_res = resolution // 2**(self.num_resolutions - 1)
         self.z_shape = (1, z_channels, curr_res)
-        print("Working with z of shape {} = {} dimensions.".format(
-            self.z_shape, np.prod(self.z_shape)))
+        print(f"Working with z of shape {self.z_shape} dimensions.")
 
         self.conv_in = nn.Conv1d(z_channels, block_in, kernel_size=3, stride=1, padding=1)
 
         # middle
         self.mid = nn.Module()
-        self.mid.block_1 = ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout)
+        self.mid.block_1 = ResnetBlock(in_channels=block_in, out_channels=block_in, t_emb_channels=self.temb_ch, dropout=dropout)
         self.mid.attn_1 = LinearAttention(dim=block_in)
-        self.mid.block_2 = ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout)
+        self.mid.block_2 = ResnetBlock(in_channels=block_in, out_channels=block_in, t_emb_channels=self.temb_ch, dropout=dropout)
 
         # upsampling
         self.up = nn.ModuleList()
@@ -263,7 +281,7 @@ class Decoder(nn.Module):
             attn = nn.ModuleList()
             block_out = ch * ch_mult[i_level]
             for i_block in range(self.num_res_blocks + 1):
-                block.append(ResnetBlock(in_channels=block_in, out_channels=block_out, temb_channels=self.temb_ch, dropout=dropout))
+                block.append(ResnetBlock(in_channels=block_in, out_channels=block_out, t_emb_channels=self.temb_ch, dropout=dropout))
                 block_in = block_out
                 if curr_res in attn_resolutions:
                     attn.append(LinearAttention(dim=block_in))
@@ -307,19 +325,49 @@ class Decoder(nn.Module):
         return h
 
 
-class PerceptualLoss:
+class TimeDomainLoss(nn.Module):
     def __init__(self):
-        pass
+        super(TimeDomainLoss, self).__init__()
+        self.l1_loss = nn.L1Loss()
 
-    def __call__(self, inputs, reconstructions, posterior, optimizer_idx, global_step, last_layer, split):
-        rec_loss = nn.MSELoss()(reconstructions, inputs)
-        return rec_loss, {'rec_loss': rec_loss}
+    def forward(self, y_pred, y_true):
+        return self.l1_loss(y_pred, y_true)
 
+class FrequencyDomainLoss(nn.Module):
+    def __init__(self):
+        super(FrequencyDomainLoss, self).__init__()
+        self.l1_loss = nn.L1Loss()
+
+    def forward(self, y_pred, y_true):
+        # Compute the STFT of y_pred and y_true
+        stft_pred = torch.stft(y_pred, n_fft=1024, hop_length=256, win_length=1024)
+        stft_true = torch.stft(y_true, n_fft=1024, hop_length=256, win_length=1024)
+
+        # Compute the magnitude of the STFT
+        mag_pred = torch.sqrt(stft_pred.pow(2).sum(-1))
+        mag_true = torch.sqrt(stft_true.pow(2).sum(-1))
+
+        # Compute the L1 loss between the magnitudes
+        loss = self.l1_loss(mag_pred, mag_true)
+        return loss
+    
+class CombinedAudioLoss(nn.Module):
+    def __init__(self, alpha=0.5):
+        super(CombinedAudioLoss, self).__init__()
+        self.time_domain_loss = TimeDomainLoss()
+        self.frequency_domain_loss = FrequencyDomainLoss()
+        self.alpha = alpha
+
+    def forward(self, y_pred, y_true):
+        time_loss = self.time_domain_loss(y_pred, y_true)
+        freq_loss = self.frequency_domain_loss(y_pred, y_true)
+        loss = (1 - self.alpha) * time_loss + self.alpha * freq_loss
+        return loss
 
 
 class VAE(pl.LightningModule):
     def __init__(self,
-                 embed_dim,
+                 embed_dim=64,
                  ckpt_path=None,
                  ignore_keys=[],
                  monitor=None,
@@ -328,7 +376,7 @@ class VAE(pl.LightningModule):
         super().__init__()
         self.encoder = Encoder()
         self.decoder = Decoder()
-        self.loss = PerceptualLoss()
+        self.loss = CombinedAudioLoss(alpha=0.5)
         self.lossconfig = {}
         self.quant_conv = nn.Conv1d(2*16, 2*embed_dim, 1)
         self.post_quant_conv = nn.Conv1d(embed_dim, 16, 1)
@@ -384,53 +432,39 @@ class VAE(pl.LightningModule):
     # Returns the optimizers and optionally rate schedulers used in training
     def configure_optimizers(self):
         lr = self.learning_rate
-        opt_ae = torch.optim.Adam(list(self.encoder.parameters())+
-                              list(self.decoder.parameters())+
-                              list(self.quant_conv.parameters())+
-                              list(self.post_quant_conv.parameters()),
-                              lr=lr, betas=(0.5, 0.9))
-        opt_disc = torch.optim.Adam(self.loss.discriminator.parameters(), 
-                                    lr=lr, betas=(0.5, 0.9))
-        return [opt_ae, opt_disc], []
+        opt_ae = torch.optim.Adam(self.parameters(), lr=lr, betas=(0.5, 0.9))
+        return opt_ae
 
     def training_step(self, batch, batch_idx, optimizer_idx):
         inputs = self.get_input(batch, self.image_key)
         reconstructions, posterior = self(inputs)
 
-        # optimizer_idx indicates there are multiple optimizers
-        if optimizer_idx == 0:
-            # Calculate the loss of Encoder and the Decoder
-            aeloss, log_dict_ae = self.loss(inputs, reconstructions, posterior, optimizer_idx, self.global_step, last_layer=self.get_last_layer(), split='train')
-            self.log('aeloss', aeloss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
-            self.log_dict(log_dict_ae, prog_bar=False, logger=True, on_step=True, on_epoch=False)
-            return aeloss
-        
-        if optimizer_idx == 1:
-            # Train the Discriminator
-            discloss, log_dict_disc = self.loss(inputs, reconstructions, posterior, optimizer_idx, self.global_step, last_layer=self.get_last_layer(), split='train')
-            self.log('discloss', discloss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
-            self.log_dict(log_dict_disc, prog_bar=False, logger=True, on_step=True, on_epoch=False)
-            return discloss
+        # Calculate the combined audio loss
+        loss = self.combined_audio_loss(reconstructions, inputs)
+        self.log('train_loss', loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
+        return loss
         
     def validation_step(self, batch, batch_idx):
         inputs = self.get_input(batch, self.image_key)
-        reconstructions, posterior = self(inputs)
-        reconstructions, posterior = self(inputs)
-        aeloss, log_dict_ae = self.loss(inputs, reconstructions, posterior, 0, self.global_step,
-                                        last_layer=self.get_last_layer(), split="val")
+        reconstructions, _ = self(inputs)
 
-        self.log("val/rec_loss", log_dict_ae["val/rec_loss"])
-        self.log_dict(log_dict_ae)
-        return aeloss
+        # Calculate the combined audio loss
+        val_loss = self.combined_audio_loss(reconstructions, inputs)
+        self.log('val_loss', val_loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
+        return val_loss
     
     def get_last_layer(self):
         return self.decoder.conv_out.weight
     
 if __name__ == "__main__":
+    from music_dataset import MusicDataset
+    from torch.utils.data import DataLoader
+
     model = VAE()
 
-    from torch.utils.data import DataLoader
-    train_loader = DataLoader(dataset, batch_size=32, shuffle=True)
+    train_set = MusicDataset(root_dir='data/raw')
+    train_loader = DataLoader(train_set, batch_size=4, shuffle=True, num_workers=16)
+    val_loader = DataLoader(train_set, batch_size=16, num_workers=16)
 
-    trainer = pl.Trainer(max_epochs=100)
-    trainer.fit(model, train_loader)
+    trainer = pl.Trainer(max_epochs=100, precision='16-mixed')
+    trainer.fit(model, train_loader, val_loader)
