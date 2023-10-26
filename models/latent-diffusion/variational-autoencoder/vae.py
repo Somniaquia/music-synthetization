@@ -246,7 +246,7 @@ class Encoder(nn.Module):
         return h
     
 class Decoder(nn.Module):
-    def __init__(self, ch=128, out_ch=3, ch_mult=(1, 1, 2, 2, 4), num_res_blocks=2, 
+    def __init__(self, ch=128, out_ch=1, ch_mult=(1, 1, 2, 2, 4), num_res_blocks=2, 
                  attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=1, 
                  resolution=4800000, z_channels=256, give_pre_end=False, tanh_out=False, **ignorekwargs):
         super().__init__()
@@ -457,8 +457,8 @@ if __name__ == "__main__":
 
     train_set = MusicDataset(root_dir=input("Data direrctory: "))
 
-    train_loader = DataLoader(train_set, batch_size=1, shuffle=True, num_workers=0, collate_fn=collate_fn)
-    val_loader = DataLoader(train_set, batch_size=1, num_workers=0, collate_fn=collate_fn)
+    train_loader = DataLoader(train_set, batch_size=4, shuffle=True, num_workers=4, collate_fn=collate_fn)
+    val_loader = DataLoader(train_set, batch_size=4, num_workers=4, collate_fn=collate_fn)
     for batch in train_loader:
         print("Batch shape:", batch.shape)
         break
