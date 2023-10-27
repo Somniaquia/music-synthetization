@@ -180,18 +180,57 @@ class DiagonalGaussianDistribution(object):
     def mode(self):
         return self.mean
     
+class TimeDomainLoss(nn.Module):
+    def __init__(self):
+        super(TimeDomainLoss, self).__init__()
+        self.l1_loss = nn.L1Loss()
+
+    def forward(self, y_pred, y_true):
+        return self.l1_loss(y_pred, y_true)
+
+class FrequencyDomainLoss(nn.Module):
+    def __init__(self):
+        super(FrequencyDomainLoss, self).__init__()
+        self.l1_loss = nn.L1Loss()
+
+    def forward(self, y_pred, y_true):
+        # Compute the STFT of y_pred and y_true
+        stft_pred = torch.stft(y_pred.squeeze(), n_fft=1024, hop_length=256, win_length=1024, return_complex=True)
+        stft_true = torch.stft(y_true.squeeze(), n_fft=1024, hop_length=256, win_length=1024, return_complex=True)
+
+        # Compute the magnitude of the STFT
+        mag_pred = stft_pred.abs()
+        mag_true = stft_true.abs()
+
+        # Compute the L1 loss between the magnitudes
+        loss = self.l1_loss(mag_pred, mag_true)
+        return loss
+    
+class CombinedAudioLoss(nn.Module):
+    def __init__(self, alpha=0.5):
+        super(CombinedAudioLoss, self).__init__()
+        self.time_domain_loss = TimeDomainLoss()
+        self.frequency_domain_loss = FrequencyDomainLoss()
+        self.alpha = alpha
+
+    def forward(self, y_pred, y_true):
+        time_loss = self.time_domain_loss(y_pred, y_true)
+        freq_loss = self.frequency_domain_loss(y_pred, y_true)
+        loss = (1 - self.alpha) * time_loss + self.alpha * freq_loss
+        return loss
+
+
 class Encoder(nn.Module):
-    def __init__(self, ch=128, out_ch=3, ch_mult=(1, 1, 2, 2, 4), num_res_blocks=2,
-                 attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=1,
-                 resolution=4800000, z_channels=18750, give_pre_end=False, tanh_out=False, **ignorekwargs):
+    def __init__(self, ch=64, ch_mult=(1, 2, 4, 8), num_res_blocks=2, attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=1, resolution=4800000, z_channels=512):
         super().__init__()
         self.ch = ch
-        self.t_emb_ch = 0
         self.num_resolutions = len(ch_mult)
         self.num_res_blocks = num_res_blocks
         self.attn_resolutions = attn_resolutions
         self.resolution = resolution
         self.in_channels = in_channels
+        self.z_channels = z_channels
+        self.t_emb_ch = 0
 
         # Downsampling layers
         self.conv_in = nn.Conv1d(in_channels, self.ch, kernel_size=3, stride=1, padding=1)
@@ -246,18 +285,16 @@ class Encoder(nn.Module):
         return h
     
 class Decoder(nn.Module):
-    def __init__(self, ch=128, out_ch=1, ch_mult=(1, 1, 2, 2, 4), num_res_blocks=2, 
-                 attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=1, 
-                 resolution=4800000, z_channels=256, give_pre_end=False, tanh_out=False, **ignorekwargs):
+    def __init__(self, ch=64, out_ch=1, ch_mult=(8, 4, 2, 1), num_res_blocks=2, attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=1, resolution=4800000, z_channels=512):
         super().__init__()
         self.ch = ch
-        self.temb_ch = 0
         self.num_resolutions = len(ch_mult)
         self.num_res_blocks = num_res_blocks
         self.resolution = resolution
         self.in_channels = in_channels
-        self.give_pre_end = give_pre_end
-        self.tanh_out = tanh_out
+        self.z_channels = z_channels
+        self.out_ch = out_ch
+        self.t_emb_ch = 0
 
         # Compute in_ch_mult, block_in, and curr_res at lowest res
         in_ch_mult = (1,) + tuple(ch_mult)
@@ -270,9 +307,9 @@ class Decoder(nn.Module):
 
         # middle
         self.mid = nn.Module()
-        self.mid.block_1 = ResnetBlock(in_channels=block_in, out_channels=block_in, t_emb_channels=self.temb_ch, dropout=dropout)
+        self.mid.block_1 = ResnetBlock(in_channels=block_in, out_channels=block_in, t_emb_channels=self.t_emb_ch, dropout=dropout)
         self.mid.attn_1 = LinearAttention(dim=block_in)
-        self.mid.block_2 = ResnetBlock(in_channels=block_in, out_channels=block_in, t_emb_channels=self.temb_ch, dropout=dropout)
+        self.mid.block_2 = ResnetBlock(in_channels=block_in, out_channels=block_in, t_emb_channels=self.t_emb_ch, dropout=dropout)
 
         # upsampling
         self.up = nn.ModuleList()
@@ -281,7 +318,7 @@ class Decoder(nn.Module):
             attn = nn.ModuleList()
             block_out = ch * ch_mult[i_level]
             for i_block in range(self.num_res_blocks + 1):
-                block.append(ResnetBlock(in_channels=block_in, out_channels=block_out, t_emb_channels=self.temb_ch, dropout=dropout))
+                block.append(ResnetBlock(in_channels=block_in, out_channels=block_out, t_emb_channels=self.t_emb_ch, dropout=dropout))
                 block_in = block_out
                 if curr_res in attn_resolutions:
                     attn.append(LinearAttention(dim=block_in))
@@ -325,61 +362,15 @@ class Decoder(nn.Module):
         return h
 
 
-class TimeDomainLoss(nn.Module):
-    def __init__(self):
-        super(TimeDomainLoss, self).__init__()
-        self.l1_loss = nn.L1Loss()
-
-    def forward(self, y_pred, y_true):
-        return self.l1_loss(y_pred, y_true)
-
-class FrequencyDomainLoss(nn.Module):
-    def __init__(self):
-        super(FrequencyDomainLoss, self).__init__()
-        self.l1_loss = nn.L1Loss()
-
-    def forward(self, y_pred, y_true):
-        # Compute the STFT of y_pred and y_true
-        stft_pred = torch.stft(y_pred, n_fft=1024, hop_length=256, win_length=1024)
-        stft_true = torch.stft(y_true, n_fft=1024, hop_length=256, win_length=1024)
-
-        # Compute the magnitude of the STFT
-        mag_pred = torch.sqrt(stft_pred.pow(2).sum(-1))
-        mag_true = torch.sqrt(stft_true.pow(2).sum(-1))
-
-        # Compute the L1 loss between the magnitudes
-        loss = self.l1_loss(mag_pred, mag_true)
-        return loss
-    
-class CombinedAudioLoss(nn.Module):
-    def __init__(self, alpha=0.5):
-        super(CombinedAudioLoss, self).__init__()
-        self.time_domain_loss = TimeDomainLoss()
-        self.frequency_domain_loss = FrequencyDomainLoss()
-        self.alpha = alpha
-
-    def forward(self, y_pred, y_true):
-        time_loss = self.time_domain_loss(y_pred, y_true)
-        freq_loss = self.frequency_domain_loss(y_pred, y_true)
-        loss = (1 - self.alpha) * time_loss + self.alpha * freq_loss
-        return loss
-
-
 class VAE(pl.LightningModule):
-    def __init__(self,
-                 embed_dim=64,
-                 ckpt_path=None,
-                 ignore_keys=[],
-                 monitor=None,
-                 learning_rate=1e-3
-                 ):
+    def __init__(self, embed_dim=64, ckpt_path=None, ignore_keys=[], monitor=None, learning_rate=1e-3):
         super().__init__()
-        self.encoder = Encoder()
-        self.decoder = Decoder()
+        self.encoder = Encoder(ch=64, ch_mult=(1, 2, 4, 8), resolution=4800000, z_channels=512)
+        self.decoder = Decoder(ch=64, ch_mult=(8, 4, 2, 1), resolution=4800000, z_channels=512)
         self.loss = CombinedAudioLoss(alpha=0.5)
-        self.lossconfig = {}
-        self.quant_conv = nn.Conv1d(512, 128, 1)
-        self.post_quant_conv = nn.Conv1d(64, 256, 1)
+
+        self.quant_conv = nn.Conv1d(512, embed_dim, 1)  # Matched to z_channels
+        self.post_quant_conv = nn.Conv1d(embed_dim, 512, 1)  # Matched to z_channels
         self.embed_dim = embed_dim
         self.learning_rate = learning_rate
 
@@ -452,16 +443,21 @@ if __name__ == "__main__":
     from music_dataset import MusicDataset, collate_fn
     from torch.utils.data import DataLoader
     from torch.nn.utils.rnn import pad_sequence
+    import torchviz
 
     model = VAE()
 
-    train_set = MusicDataset(root_dir=input("Data direrctory: "))
+    x = torch.randn(1, 1, 4800000) 
+    y = model(x)
+    torchviz.make_dot(y, params=dict(list(model.named_parameters()) + [('x', x)]))
 
-    train_loader = DataLoader(train_set, batch_size=1, shuffle=True, num_workers=1, collate_fn=collate_fn)
-    val_loader = DataLoader(train_set, batch_size=1, num_workers=1, collate_fn=collate_fn)
-    for batch in train_loader:
-        print("Batch shape:", batch.shape)
-        break
+    # train_set = MusicDataset(root_dir=input("Data direrctory: "))
 
-    trainer = pl.Trainer(max_epochs=100, precision='16-mixed')
-    trainer.fit(model, train_loader, val_loader)
+    # train_loader = DataLoader(train_set, batch_size=1, shuffle=True, num_workers=1, collate_fn=collate_fn)
+    # val_loader = DataLoader(train_set, batch_size=1, num_workers=1, collate_fn=collate_fn)
+    # for batch in train_loader:
+    #     print("Batch shape:", batch.shape)
+    #     break
+
+    # trainer = pl.Trainer(max_epochs=100, precision='16-mixed')
+    # trainer.fit(model, train_loader, val_loader)
