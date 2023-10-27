@@ -3,3 +3,4 @@ torchaudio
 einops
 pytorch_lightning
 numpy
+torchviz

@@ -221,7 +221,7 @@ class CombinedAudioLoss(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, ch=64, ch_mult=(1, 2, 4, 8), num_res_blocks=2, attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=1, resolution=4800000, z_channels=512):
+    def __init__(self, ch=64, ch_mult=(1, 2, 4, 8), num_res_blocks=1, attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=1, resolution=4800000, z_channels=512):
         super().__init__()
         self.ch = ch
         self.num_resolutions = len(ch_mult)
@@ -285,7 +285,7 @@ class Encoder(nn.Module):
         return h
     
 class Decoder(nn.Module):
-    def __init__(self, ch=64, out_ch=1, ch_mult=(8, 4, 2, 1), num_res_blocks=2, attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=1, resolution=4800000, z_channels=512):
+    def __init__(self, ch=64, out_ch=1, ch_mult=(8, 4, 2, 1), num_res_blocks=1, attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=1, resolution=4800000, z_channels=512):
         super().__init__()
         self.ch = ch
         self.num_resolutions = len(ch_mult)
@@ -317,7 +317,7 @@ class Decoder(nn.Module):
             block = nn.ModuleList()
             attn = nn.ModuleList()
             block_out = ch * ch_mult[i_level]
-            for i_block in range(self.num_res_blocks + 1):
+            for i_block in range(self.num_res_blocks):
                 block.append(ResnetBlock(in_channels=block_in, out_channels=block_out, t_emb_channels=self.t_emb_ch, dropout=dropout))
                 block_in = block_out
                 if curr_res in attn_resolutions:
@@ -446,10 +446,10 @@ if __name__ == "__main__":
     import torchviz
 
     model = VAE()
-
+    print(model)
     x = torch.randn(1, 1, 4800000) 
     y = model(x)
-    torchviz.make_dot(y, params=dict(list(model.named_parameters()) + [('x', x)]))
+    # torchviz.make_dot(y, params=dict(list(model.named_parameters()) + [('x', x)]))
 
     # train_set = MusicDataset(root_dir=input("Data direrctory: "))
 
