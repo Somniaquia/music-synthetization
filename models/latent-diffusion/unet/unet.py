@@ -210,7 +210,7 @@ class DDIM(pl.LightningModule):
 
 
 if __name__ == "__main__":
-    from ..vae.music_dataset import MusicDataset, collate_fn
+    from ..music_dataset import MusicDataset, collate_fn
     from ..vae.vae import VAE
     from torch.utils.data import DataLoader
 

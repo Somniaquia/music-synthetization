@@ -339,10 +339,9 @@ class VAE(pl.LightningModule):
         return self.decoder.conv_out.weight
     
 if __name__ == "__main__":
-    from music_dataset import MusicDataset, collate_fn
+    from ..music_dataset import MusicDataset, collate_fn
     from torch.utils.data import DataLoader
     from torch.nn.utils.rnn import pad_sequence
-    import torchviz
 
     model = VAE()
     print(model)

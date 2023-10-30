@@ -17,8 +17,8 @@ def get_random_file_in_subfolders(directory):
     else:
         return None
 
-# path = get_random_file_in_subfolders("data/16kHz")
-path = "C:\Somnia\Projects\music-synthetization\data\\16kHz\ぬゆり\フラジール - GUMI _ Fragile - nulut.wav"
+# path = get_random_file_in_subfolders("data\8kHz_8bit")
+path = "C:\Somnia\Projects\music-synthetization\data\8kHz_8bit\ぬゆり\フラジール - GUMI _ Fragile - nulut.wav"
 
 pygame.mixer.init()
 y, sr = librosa.load(path)
