@@ -118,6 +118,12 @@ class DDPM(pl.LightningModule):
     def forward(self, x, t):
         return self.unet_model(x, t)
 
+    def get_alpha_bar_t(self, t, T):
+        timesteps = torch.arange(T, device=self.device, dtype=torch.float32) / T
+        alphas = torch.cos((timesteps + 0.008) / 1.008 * (math.pi / 2)) ** 2
+        alpha_bar_t = torch.cumprod(alphas, dim=0)
+        return alpha_bar_t[t]
+
     def training_step(self, batch, batch_idx):
         x_0 = batch  # Original data
         B, C, L = x_0.shape
@@ -126,7 +132,7 @@ class DDPM(pl.LightningModule):
         t = torch.randint(0, self.T, (B,), device=self.device).long()
 
         # Perform the forward diffusion process
-        alpha_bar_t = 
+        alpha_bar_t = self.get_alpha_bar_t(t, self.T)
         noise = torch.randn_like(x_0)
         x_t = torch.sqrt(alpha_bar_t[:, None, None]) * x_0 + torch.sqrt(1 - alpha_bar_t[:, None, None]) * noise
 
@@ -143,10 +149,69 @@ class DDPM(pl.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
 
+def ddim_step(x_t, t, eps_theta, alpha_bar, alpha, sigma):
+    """
+    Perform a DDIM step.
+
+    :param x_t: Noisy sample at time t
+    :param t: Time step
+    :param eps_theta: Noise prediction from the model
+    :param alpha_bar: Cumulative product of alphas
+    :param alpha: Alpha values for each time step
+    :param sigma: Sigma values for each time step
+    :return: Predicted sample for next time step
+    """
+    sqrt_alpha_bar_next = torch.sqrt(alpha_bar[t - 1])
+    sqrt_one_minus_alpha = torch.sqrt(1.0 - alpha[t])
+    
+    # Calculate the predicted sample for the next time step
+    x_t_next = (x_t - sqrt_one_minus_alpha * eps_theta) / sqrt_alpha_bar_next
+    return x_t_next
+
+class DDIM(pl.LightningModule):
+    def __init__(self, unet_model, T=1000, learning_rate=1e-4):
+        super().__init__()
+        self.unet_model = unet_model
+        self.T = T
+        self.learning_rate = learning_rate
+        self.loss_fn = torch.nn.MSELoss()
+        
+        self.alpha = torch.linspace(0.9999, 0.01, T)
+        self.alpha_bar = torch.cumprod(self.alpha, dim=0)
+        self.sigma = torch.zeros(T)  
+
+    def forward(self, x, t):
+        return self.unet_model(x, t)
+
+    def training_step(self, batch, batch_idx):
+        x_0 = batch
+        B, C, L = x_0.shape
+
+        # Sample a random timestep for each example in the batch
+        t = torch.randint(1, self.T + 1, (B,), device=self.device).long()
+        t_index = t - 1  # Convert to 0-indexing
+        
+        # Perform the forward diffusion process
+        noise = torch.randn_like(x_0)
+        x_t = torch.sqrt(self.alpha_bar[t_index][:, None, None]) * x_0 + torch.sqrt(1.0 - self.alpha_bar[t_index][:, None, None]) * noise
+
+        eps_theta = self(x_t, t)
+
+        # Perform the DDIM step
+        x_t_next_pred = ddim_step(x_t, t, eps_theta, self.alpha_bar, self.alpha, self.sigma)
+
+        loss = self.loss_fn(x_t_next_pred, x_0)
+        
+        self.log('train_loss', loss, on_epoch=True, prog_bar=True)
+        return loss
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+
 
 if __name__ == "__main__":
-    from ..variational_autoencoder.music_dataset import MusicDataset, collate_fn
-    from ..variational_autoencoder.vae import VAE
+    from ..vae.music_dataset import MusicDataset, collate_fn
+    from ..vae.vae import VAE
     from torch.utils.data import DataLoader
 
     vae_model = VAE()
