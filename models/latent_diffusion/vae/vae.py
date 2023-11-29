@@ -1,16 +1,16 @@
 # Code taken from https://github.com/CompVis/stable-diffusion.git
 # for personal learning purposes
 
-from einops import rearrange
 import math
-from models.latent_diffusion.loss import CombinedAudioLoss
 import numpy as np
+from einops import rearrange
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
 
-from ..blocks import *
+from latent_diffusion.loss import CombinedAudioLoss
+from models.latent_diffusion.blocks import *
 
 torch.set_float32_matmul_precision('medium')
 
@@ -300,12 +300,15 @@ class VAE(pl.LightningModule):
         return self.decoder.conv_out.weight
     
 if __name__ == "__main__":
-    from ..music_dataset import MusicDataset, collate_fn
     from torch.utils.data import DataLoader
     from torch.nn.utils.rnn import pad_sequence
+    from models.latent_diffusion.music_dataset import MusicDataset, collate_fn
+    from models.size_estimator import estimate_vram_usage
 
     model = VAE()
     print(model)
+
+    estimate_vram_usage(model, input_size=(1, 4800000), dtype=torch.float32, training=True)
 
     train_set = MusicDataset(root_dir=input("Data direrctory: "))
 

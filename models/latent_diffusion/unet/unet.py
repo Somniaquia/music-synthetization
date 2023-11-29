@@ -211,7 +211,8 @@ class DDIM(pl.LightningModule):
 
 if __name__ == "__main__":
     from models.latent_diffusion.music_dataset import MusicDataset
-    from ..vae.vae import VAE
+    from models.latent_diffusion.music_dataset import collate_fn
+    from models.latent_diffusion.vae.vae import VAE
     from torch.utils.data import DataLoader
 
     vae_model = VAE()

@@ -1,6 +1,11 @@
 {
     "[python]": {
-        "editor.defaultFormatter": "ms-python.autopep8"
+        "editor.defaultFormatter": "ms-python.autopep8",
+        "python.formatting.provider": "none",
+        "python.linting.pylintArgs": [
+            "--init-hook",
+            "import sys; sys.path.append('C:\\Somnia\\Projects\\music-synthetization\\models')"
+        ]
     },
-    "python.formatting.provider": "none"
+    
 }

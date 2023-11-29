@@ -34,8 +34,7 @@ class CelestialObject:
         scaled_sprite = pygame.transform.scale(
             sprite, (int(self.radius * 2 * zoom), int(self.radius * 2 * zoom)))
 
-        screen.blit(scaled_sprite, (int(screen_x - self.radius *
-                    zoom), int(screen_y - self.radius * zoom)))
+        screen.blit(scaled_sprite, (int(screen_x - self.radius * zoom), int(screen_y - self.radius * zoom)))
         
     def focus_camera(self):
         pass
@@ -78,49 +77,58 @@ while True:
         if event.type == pygame.MOUSEBUTTONDOWN:
             mouse_x, mouse_y = pygame.mouse.get_pos()
             for planet in celestial_objects:
-                planet_x, planet_y = planet.center
+                orbit_x = planet.orbit[0] * math.cos(planet.angle) * smooth_zoom
+                orbit_y = planet.orbit[1] * math.sin(planet.angle) * smooth_zoom
 
-                if (mouse_x - planet_x)**2 + (mouse_y - planet_y)**2 <= (planet.radius * zoom)**2:
+                screen_x = (planet.center[0] + orbit_x - smooth_camera_position[0]) * smooth_zoom
+                screen_y = (planet.center[1] + orbit_y - smooth_camera_position[1]) * smooth_zoom
+
+                if (mouse_x - screen_x)**2 + (mouse_y - screen_y)**2 <= (planet.radius * smooth_zoom)**2:
                     focused_planet = planet
-                    
                     break
 
     keys = pygame.key.get_pressed()
     
     if keys[pygame.K_UP]:
-        camera_position = (camera_position[0], camera_position[1] - speed / zoom)
+        camera_position = (camera_position[0], camera_position[1] - speed / smooth_zoom)
+        focused_planet = None
     if keys[pygame.K_DOWN]:
-        camera_position = (camera_position[0], camera_position[1] + speed / zoom)
+        camera_position = (camera_position[0], camera_position[1] + speed / smooth_zoom)
+        focused_planet = None
     if keys[pygame.K_LEFT]:
-        camera_position = (camera_position[0] - speed / zoom, camera_position[1])
+        camera_position = (camera_position[0] - speed / smooth_zoom, camera_position[1])
+        focused_planet = None
     if keys[pygame.K_RIGHT]:
-        camera_position = (camera_position[0] + speed / zoom, camera_position[1])
+        camera_position = (camera_position[0] + speed / smooth_zoom, camera_position[1])
+        focused_planet = None
     
     if keys[pygame.K_EQUALS]:
+        camera_position = (
+            camera_position[0] - (width / 2 - camera_position[0]) / (zoom_factor - 1) / smooth_zoom,
+            camera_position[1] - (height / 2 - camera_position[1]) / (zoom_factor - 1) / smooth_zoom
+        )
         zoom *= zoom_factor
 
-        camera_position = (
-            camera_position[0] + (width / 2 - camera_position[0]) * (zoom_factor - 1),
-            camera_position[1] + (height / 2 - camera_position[1]) * (zoom_factor - 1)
-        )
-
     if keys[pygame.K_MINUS]:
+        camera_position = (
+            camera_position[0] + (width / 2 - camera_position[0]) / (1 - 1 / zoom_factor) / smooth_zoom,
+            camera_position[1] + (height / 2 - camera_position[1]) / (1 - 1 / zoom_factor) / smooth_zoom
+        )
         zoom /= zoom_factor
 
-        camera_position = (
-            camera_position[0] - (width / 2 - camera_position[0]) * (zoom_factor - 1),
-            camera_position[1] - (height / 2 - camera_position[1]) * (zoom_factor - 1)
-        )
-
-    print(zoom)
+    smooth_zoom += (zoom - smooth_zoom) * 0.01
+    smooth_camera_position = (camera_position[0] + (camera_position[0] - smooth_camera_position[0]) * 0.01, camera_position[1] + (camera_position[1] - smooth_camera_position[1]) * 0.01)
 
     if keys[pygame.K_SPACE]:
         focused_planet = None
 
     if focused_planet:
-        camera_position = (focused_planet.center[0] - width / 2 / zoom, focused_planet.center[1] - height / 2 / zoom)
+        camera_position = (
+            focused_planet.center[0] - width / 2 / smooth_zoom, 
+            focused_planet.center[1] - height / 2 / smooth_zoom
+        )
 
     screen.fill((0, 0, 0))
     for planet in celestial_objects:
-        planet.draw(camera_position, zoom)
+        planet.draw(smooth_camera_position, smooth_zoom)
     pygame.display.flip()
