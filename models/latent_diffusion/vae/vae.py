@@ -9,8 +9,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
 
-from latent_diffusion.loss import CombinedAudioLoss
-from models.latent_diffusion.blocks import *
+from ..loss import CombinedAudioLoss
+from ..blocks import *
 
 torch.set_float32_matmul_precision('medium')
 

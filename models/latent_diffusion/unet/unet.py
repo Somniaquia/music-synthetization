@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 
-from models.latent_diffusion.blocks import *
+from ..blocks import *
 
 class UNetDDPM(nn.Module):
     def __init__(self, ch=64, ch_mult=(1, 2, 4, 8), num_res_blocks=1, attn_resolutions=[], z_channels=512, resolution=4800000, dropout=0.0, resamp_with_conv=True):
@@ -207,25 +207,3 @@ class DDIM(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-
-
-if __name__ == "__main__":
-    from models.latent_diffusion.music_dataset import MusicDataset
-    from models.latent_diffusion.music_dataset import collate_fn
-    from models.latent_diffusion.vae.vae import VAE
-    from torch.utils.data import DataLoader
-
-    vae_model = VAE()
-    unet_model = UNetDDPM(vae_model.encoder.z_channels, T=1000)
-    ddpm_model = DDPM(unet_model)
-
-    train_set = MusicDataset(root_dir=input("Data direrctory: "))
-
-    train_loader = DataLoader(train_set, batch_size=1, shuffle=True, num_workers=1, collate_fn=collate_fn)
-    val_loader = DataLoader(train_set, batch_size=1, num_workers=1, collate_fn=collate_fn)
-    for batch in train_loader:
-        print("Batch shape:", batch.shape)
-        break
-
-    trainer = pl.Trainer(max_epochs=100, precision='16-mixed')
-    trainer.fit(ddpm_model, train_loader, val_loader)
