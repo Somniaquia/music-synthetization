@@ -29,7 +29,7 @@ def plot_spectogram(y, sr):
 
     plt.figure(figsize=(10, 8))
     plt.rcParams["font.family"] = 'Microsoft YaHei'
-    plt.suptitle(path.split('\\')[-1].split('.wav')[0], fontsize=16)
+    # plt.suptitle(path.split('\\')[-1].split('.wav')[0], fontsize=16)
 
     for i in range(3):
         plt.subplot(3, 1, i+1)

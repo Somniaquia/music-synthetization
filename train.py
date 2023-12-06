@@ -28,10 +28,10 @@ if __name__ == "__main__":
         from models.latent_diffusion.music_dataset import MusicDataset, collate_fn
         import pytorch_lightning as pl
 
-        model = VAE(num_res_blocks=2, resolution=48000)
-        train_set = MusicDataset(root_dir=input("Dataset path: "))
+        model = VAE(num_res_blocks=2, resolution=480000)
+        train_set = MusicDataset(root_dir="./data/8kHz_8bit")
 
-        collate_fn = partial(collate_fn, max_length=48000)
+        collate_fn = partial(collate_fn, max_length=480000)
 
         train_loader = DataLoader(train_set, batch_size=1, shuffle=True, num_workers=16, collate_fn=collate_fn)
         val_loader = DataLoader(train_set, batch_size=1, num_workers=16, collate_fn=collate_fn)
@@ -53,7 +53,7 @@ if __name__ == "__main__":
         vae_model = VAE()
         unet_model = UNetDDPM(vae_model.encoder.z_channels)
         ddim_model = DDPM(unet_model)
-        train_set = MusicDataset(root_dir=input("Data direrctory: "))
+        train_set = MusicDataset(root_dir="./data/8kHz_8bit")
 
         collate_fn = partial(collate_fn, max_length=48000)
 

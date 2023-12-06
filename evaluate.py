@@ -6,8 +6,12 @@ import torch
 from data.spectogram import get_random_file_in_subfolders, plot_spectogram
 from train import get_latest_checkpoint
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"Using device {device} for inference")
+
 if __name__ == "__main__":
-    option = input("Model to evaluate: ")
+    # option = input("Model to evaluate: ")
+    option = "vae"
 
     if option == "vae":
         from models.latent_diffusion.vae.vae import VAE
@@ -15,25 +19,29 @@ if __name__ == "__main__":
         from models.latent_diffusion.music_dataset import MusicDataset, collate_fn
         import pytorch_lightning as pl
 
-        # path = get_random_file_in_subfolders("data\8kHz_8bit")
-        # path = "C:\Somnia\Projects\music-synthetization\data\8kHz_8bit\ぬゆり\フラジール - GUMI _ Fragile - nulut.wav"
-        path = input("Music Path: ")
+        # path = get_random_file_in_subfolders("data/8kHz_8bit")
+        path = "./data/8kHz_8bit/ぬゆり/フラジール - GUMI _ Fragile - nulut.wav"
+        # path = input("Music Path: ")
         y, sr = librosa.load(path)
 
-        processed_y = collate_fn([torch.tensor(y).unsqueeze(0)], max_length=48000).squeeze(0)
-        
-        model = VAE(num_res_blocks=2, resolution=48000)
-        model.eval()
+        resolution = int(input("Reconstruct resolution: "))
 
-        model.load_state_dict(torch.load(get_latest_checkpoint())['state_dict'])
-        y_tensor = torch.tensor(y).unsqueeze(0).unsqueeze(0)
+        processed_y = collate_fn([torch.tensor(y).unsqueeze(0)], max_length=resolution).squeeze(0).squeeze(0).numpy()
+        plot_spectogram(processed_y, sr)
         
         with torch.no_grad():
-            reconstructed_y = model(y_tensor).squeeze().numpy()
+            model = VAE(num_res_blocks=2, resolution=resolution).to(device)
+            model.eval()
 
-        collate_fn = partial(collate_fn, max_length=48000)
-        
-        plot_spectogram(y, sr)
+            model.load_state_dict(torch.load(get_latest_checkpoint())['state_dict'])
+            y_tensor = torch.tensor(processed_y).unsqueeze(0).unsqueeze(0)
+            
+            with torch.no_grad():
+                reconstructed_y = model(y_tensor.to(device))[0]
+                reconstructed_y = reconstructed_y.squeeze(0).squeeze(0).cpu().numpy()
+
+        model.cpu()
+
         plot_spectogram(reconstructed_y, sr)
 
 

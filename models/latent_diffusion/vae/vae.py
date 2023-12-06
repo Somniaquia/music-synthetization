@@ -227,8 +227,8 @@ class VAE(pl.LightningModule):
         self.decoder = Decoder(ch=ch, out_channels=in_channels, ch_mult=ch_mult, num_res_blocks=num_res_blocks, attn_resolutions=attn_resolutions, dropout=dropout, resamp_with_conv=resamp_with_conv, resolution=resolution, z_channels=z_channels)
         self.loss = CombinedAudioLoss(alpha=0.5)
 
-        self.quant_conv = nn.Conv1d(512, embed_dim*2, 1)  # Matched to z_channels
-        self.post_quant_conv = nn.Conv1d(embed_dim, 512, 1)  # Matched to z_channels
+        self.quant_conv = nn.Conv1d(z_channels, embed_dim*2, 1)
+        self.post_quant_conv = nn.Conv1d(embed_dim, z_channels, 1)
         self.embed_dim = embed_dim
         self.learning_rate = learning_rate
 
