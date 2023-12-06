@@ -298,25 +298,3 @@ class VAE(pl.LightningModule):
     
     def get_last_layer(self):
         return self.decoder.conv_out.weight
-    
-if __name__ == "__main__":
-    from torch.utils.data import DataLoader
-    from torch.nn.utils.rnn import pad_sequence
-    from models.latent_diffusion.music_dataset import MusicDataset, collate_fn
-    from models.size_estimator import estimate_vram_usage
-
-    model = VAE()
-    print(model)
-
-    estimate_vram_usage(model, input_size=(1, 4800000), dtype=torch.float32, training=True)
-
-    train_set = MusicDataset(root_dir=input("Data direrctory: "))
-
-    train_loader = DataLoader(train_set, batch_size=1, shuffle=True, num_workers=1, collate_fn=collate_fn)
-    val_loader = DataLoader(train_set, batch_size=1, num_workers=1, collate_fn=collate_fn)
-    for batch in train_loader:
-        print("Batch shape:", batch.shape)
-        break
-
-    trainer = pl.Trainer(max_epochs=100, precision='16-mixed')
-    trainer.fit(model, train_loader, val_loader)

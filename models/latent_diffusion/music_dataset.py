@@ -3,10 +3,9 @@ import torchaudio
 import torch
 import os
 
-def collate_fn(batch):
-    max_len = 4800000
+def collate_fn(batch, max_length = 4800000):
     mono_batch = [x.mean(dim=0, keepdim=True) for x in batch]
-    padded_batch = [torch.nn.functional.pad(x, (0, max_len - x.size(-1))) for x in mono_batch]
+    padded_batch = [torch.nn.functional.pad(x, (0, max_length - x.size(-1))) for x in mono_batch]
     
     return torch.stack(padded_batch, dim=0)
 
