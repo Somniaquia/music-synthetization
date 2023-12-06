@@ -1,5 +1,24 @@
 from functools import partial
 
+import os
+import glob
+
+def get_latest_checkpoint(log_dir='lightning_logs'):
+    version_dirs = glob.glob(os.path.join(log_dir, 'version_*'))
+
+    if not version_dirs:
+        raise FileNotFoundError("No version directories found in lightning_logs.")
+
+    latest_version_dir = sorted(version_dirs, key=lambda x: int(x.split('_')[-1]))[-1]
+    checkpoint_files = glob.glob(os.path.join(latest_version_dir, 'checkpoints', '*.ckpt'))
+
+    if not checkpoint_files:
+        return None
+    
+    latest_checkpoint = max(checkpoint_files, key=os.path.getmtime)
+
+    return latest_checkpoint
+
 if __name__ == "__main__":
     option = input("Model to train: ")
 
