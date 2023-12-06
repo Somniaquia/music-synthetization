@@ -9,7 +9,7 @@ if __name__ == "__main__":
         from models.latent_diffusion.music_dataset import MusicDataset, collate_fn
         import pytorch_lightning as pl
 
-        model = VAE()
+        model = VAE(num_res_blocks=2, resolution=48000)
         train_set = MusicDataset(root_dir=input("Dataset path: "))
 
         collate_fn = partial(collate_fn, max_length=48000)

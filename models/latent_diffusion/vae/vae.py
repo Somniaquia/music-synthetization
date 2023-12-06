@@ -86,7 +86,7 @@ class DiagonalGaussianDistribution(object):
         return self.mean
 
 class Encoder(nn.Module):
-    def __init__(self, ch=64, ch_mult=(1, 2, 4, 8), num_res_blocks=1, attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=1, resolution=4800000, z_channels=512):
+    def __init__(self, ch, ch_mult, num_res_blocks, attn_resolutions, dropout, resamp_with_conv, in_channels, resolution, z_channels):
         super().__init__()
         self.ch = ch
         self.num_resolutions = len(ch_mult)
@@ -150,15 +150,14 @@ class Encoder(nn.Module):
         return h
     
 class Decoder(nn.Module):
-    def __init__(self, ch=64, out_ch=1, ch_mult=(8, 4, 2, 1), num_res_blocks=1, attn_resolutions=[], dropout=0.0, resamp_with_conv=True, in_channels=1, resolution=4800000, z_channels=512):
+    def __init__(self, ch, out_channels, ch_mult, num_res_blocks, attn_resolutions, dropout, resamp_with_conv, resolution, z_channels):
         super().__init__()
         self.ch = ch
         self.num_resolutions = len(ch_mult)
         self.num_res_blocks = num_res_blocks
         self.resolution = resolution
-        self.in_channels = in_channels
         self.z_channels = z_channels
-        self.out_ch = out_ch
+        self.out_channels = out_channels
         self.t_emb_ch = 0
 
         # Compute in_ch_mult, block_in, and curr_res at lowest res
@@ -196,7 +195,7 @@ class Decoder(nn.Module):
             self.up.insert(0, up)
 
         self.norm_out = nn.LayerNorm(block_in)
-        self.conv_out = nn.Conv1d(block_in, out_ch, kernel_size=3, stride=1, padding=1)
+        self.conv_out = nn.Conv1d(block_in, out_channels, kernel_size=3, stride=1, padding=1)
          
 
     def forward(self, z):
@@ -223,21 +222,16 @@ class Decoder(nn.Module):
 
 
 class VAE(pl.LightningModule):
-    def __init__(self, embed_dim=64, ckpt_path=None, ignore_keys=[], monitor=None, learning_rate=1e-3):
+    def __init__(self, ch = 64, ch_mult = (1, 2, 4, 8), num_res_blocks = 1,  attn_resolutions = [], dropout: float = 0.5, resamp_with_conv: bool = True, in_channels = 1, resolution = 4800000, z_channels = 512, embed_dim=64, learning_rate=1e-3):
         super().__init__()
-        self.encoder = Encoder(ch=64, ch_mult=(1, 2, 4, 8), resolution=4800000, z_channels=512)
-        self.decoder = Decoder(ch=64, ch_mult=(8, 4, 2, 1), resolution=4800000, z_channels=512)
+        self.encoder = Encoder(ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks, attn_resolutions=attn_resolutions, dropout=dropout, resamp_with_conv=resamp_with_conv, in_channels=in_channels, resolution=resolution, z_channels=z_channels)
+        self.decoder = Decoder(ch=ch, out_channels=in_channels, ch_mult=ch_mult, num_res_blocks=num_res_blocks, attn_resolutions=attn_resolutions, dropout=dropout, resamp_with_conv=resamp_with_conv, resolution=resolution, z_channels=z_channels)
         self.loss = CombinedAudioLoss(alpha=0.5)
 
         self.quant_conv = nn.Conv1d(512, embed_dim*2, 1)  # Matched to z_channels
         self.post_quant_conv = nn.Conv1d(embed_dim, 512, 1)  # Matched to z_channels
         self.embed_dim = embed_dim
         self.learning_rate = learning_rate
-
-        if monitor is not None:
-            self.monitor = monitor
-        if ckpt_path is not None:
-            self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys)
 
     def init_from_ckpt(self, path, ignore_keys=list()):
         sd = torch.load(path, map_location='cpu')['state_dict']
