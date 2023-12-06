@@ -220,7 +220,6 @@ class Decoder(nn.Module):
         h = self.conv_out(h)
         return h
 
-
 class VAE(pl.LightningModule):
     def __init__(self, ch = 64, ch_mult = (1, 2, 4, 8), num_res_blocks = 1,  attn_resolutions = [], dropout: float = 0.5, resamp_with_conv: bool = True, in_channels = 1, resolution = 4800000, z_channels = 512, embed_dim=64, learning_rate=1e-3):
         super().__init__()
