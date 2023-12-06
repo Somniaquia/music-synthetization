@@ -4,3 +4,4 @@ einops
 pytorch_lightning
 numpy
 torchviz
+sounddevice

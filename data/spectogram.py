@@ -2,9 +2,9 @@ import librosa
 import librosa.display
 import matplotlib.pyplot as plt
 import numpy as np
-import pygame.mixer
 import random
 import os
+import sounddevice as sd
 
 def get_random_file_in_subfolders(directory):
     all_files = []
@@ -18,9 +18,7 @@ def get_random_file_in_subfolders(directory):
         return None
 
 def plot_spectogram(y, sr):
-    pygame.mixer.init()
-    pygame.mixer.music.load(path)
-    pygame.mixer.music.play(loops=-1)
+    sd.play(y, sr)
 
     S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=128)
     log_S = librosa.amplitude_to_db(S, ref=np.max)

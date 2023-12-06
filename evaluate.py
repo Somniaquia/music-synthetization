@@ -2,7 +2,6 @@ from functools import partial
 import librosa
 from matplotlib import pyplot as plt
 
-import pygame
 import torch
 from data.spectogram import get_random_file_in_subfolders, plot_spectogram
 from train import get_latest_checkpoint
@@ -17,7 +16,8 @@ if __name__ == "__main__":
         import pytorch_lightning as pl
 
         # path = get_random_file_in_subfolders("data\8kHz_8bit")
-        path = "C:\Somnia\Projects\music-synthetization\data\8kHz_8bit\ぬゆり\フラジール - GUMI _ Fragile - nulut.wav"
+        # path = "C:\Somnia\Projects\music-synthetization\data\8kHz_8bit\ぬゆり\フラジール - GUMI _ Fragile - nulut.wav"
+        path = input("Music Path: ")
         y, sr = librosa.load(path)
 
         processed_y = collate_fn([torch.tensor(y).unsqueeze(0)], max_length=48000).squeeze(0)
