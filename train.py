@@ -10,7 +10,7 @@ if __name__ == "__main__":
         import pytorch_lightning as pl
 
         model = VAE()
-        train_set = MusicDataset(root_dir="data\8kHz_8bit")
+        train_set = MusicDataset(root_dir=input("Dataset path: "))
 
         collate_fn = partial(collate_fn, max_length=48000)
 
