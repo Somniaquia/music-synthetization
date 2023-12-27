@@ -1,4 +1,5 @@
 from functools import partial
+import os
 import librosa
 from matplotlib import pyplot as plt
 
@@ -20,7 +21,8 @@ if __name__ == "__main__":
         import pytorch_lightning as pl
 
         # path = get_random_file_in_subfolders("data/8kHz_8bit")
-        path = "./data/8kHz_8bit/ぬゆり/フラジール - GUMI _ Fragile - nulut.wav"
+        path = parent_directory = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(
+            __file__)), "data", "8kHz_8bit", "ぬゆり", "フラジール - GUMI _ Fragile - nulut.wav"))
         # path = input("Music Path: ")
         y, sr = librosa.load(path)
 
@@ -57,7 +59,7 @@ if __name__ == "__main__":
         ddim_model = DDPM(unet_model)
         train_set = MusicDataset(root_dir=input("Data direrctory: "))
 
-        collate_fn = partial(collate_fn, max_length=48000)
+        collate_fn = partial(collate_fn, max_length=480000)
 
         train_loader = DataLoader(train_set, batch_size=1, shuffle=True, num_workers=1, collate_fn=collate_fn)
         val_loader = DataLoader(train_set, batch_size=1, num_workers=1, collate_fn=collate_fn)

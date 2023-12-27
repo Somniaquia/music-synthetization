@@ -25,4 +25,4 @@ def convert_and_resample(root_folder, target_sample_rate=8000, bit_depth=16):
                 except Exception as e:
                     print("Failed to process {}: {}".format(src_filepath, str(e)))
 
-convert_and_resample('data\\raw\\ぬゆり', 8000, 8)
+convert_and_resample('data\\raw', 8000, 8)

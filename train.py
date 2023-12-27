@@ -19,6 +19,8 @@ def get_latest_checkpoint(log_dir='lightning_logs'):
 
     return latest_checkpoint
 
+data_directory = parent_directory = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "8kHz_8bit"))
+
 if __name__ == "__main__":
     option = input("Model to train: ")
 
@@ -28,8 +30,8 @@ if __name__ == "__main__":
         from models.latent_diffusion.music_dataset import MusicDataset, collate_fn
         import pytorch_lightning as pl
 
-        model = VAE(num_res_blocks=2, resolution=480000)
-        train_set = MusicDataset(root_dir="./data/8kHz_8bit")
+        model = VAE(num_res_blocks=2, attn_resolutions=[120000, 60000], resolution=480000)
+        train_set = MusicDataset(root_dir=data_directory)
 
         collate_fn = partial(collate_fn, max_length=480000)
 
@@ -53,7 +55,7 @@ if __name__ == "__main__":
         vae_model = VAE()
         unet_model = UNetDDPM(vae_model.encoder.z_channels)
         ddim_model = DDPM(unet_model)
-        train_set = MusicDataset(root_dir="./data/8kHz_8bit")
+        train_set = MusicDataset(root_dir=data_directory)
 
         collate_fn = partial(collate_fn, max_length=48000)
 

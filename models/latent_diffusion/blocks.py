@@ -102,4 +102,5 @@ class LinearAttention(nn.Module):
         context = torch.einsum('bhdn,bhen->bhde', k, v)
         out = torch.einsum('bhde,bhdn->bhen', context, q)
         out = rearrange(out, 'b heads c l -> b (heads c) l', heads=self.heads, l=l)
+        
         return self.to_out(out)

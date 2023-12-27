@@ -34,17 +34,22 @@ class FrequencyDomainLoss(nn.Module):
         return loss
     
 class CombinedAudioLoss(nn.Module):
-    def __init__(self, alpha=0.5):
+    def __init__(self, alpha=0.5, beta=1.0):
         super(CombinedAudioLoss, self).__init__()
         self.time_domain_loss = TimeDomainLoss()
         self.frequency_domain_loss = FrequencyDomainLoss()
-        self.alpha = alpha
+        self.alpha = alpha # Weight of FrequencyDomainLoss
+        self.beta = beta # Weight of KL Divergence
 
-    def forward(self, y_pred, y_true):
+    def forward(self, y_pred, y_true, posterior):
         time_loss = self.time_domain_loss(y_pred, y_true)
         freq_loss = self.frequency_domain_loss(y_pred, y_true)
-        loss = (1 - self.alpha) * time_loss + self.alpha * freq_loss
-        return loss
+        reconstruction_loss = (1 - self.alpha) * time_loss + self.alpha * freq_loss
+
+        kl_divergence = posterior.kl().meaan()
+
+        total_loss = reconstruction_loss + self.beta * kl_divergence
+        return total_loss
     
 if __name__ == "__main__":
     def get_random_file_in_subfolders(directory):

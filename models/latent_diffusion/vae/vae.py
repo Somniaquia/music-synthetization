@@ -113,6 +113,7 @@ class Encoder(nn.Module):
             for i_block in range(self.num_res_blocks):
                 block.append(ResnetBlock(in_channels=block_in, out_channels=block_out, t_emb_channels=self.t_emb_ch, dropout=dropout))
                 block_in = block_out
+                print(curr_res)
                 if curr_res in attn_resolutions:
                     attn.append(LinearAttention(dim=block_in))
 
@@ -225,7 +226,7 @@ class VAE(pl.LightningModule):
         super().__init__()
         self.encoder = Encoder(ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks, attn_resolutions=attn_resolutions, dropout=dropout, resamp_with_conv=resamp_with_conv, in_channels=in_channels, resolution=resolution, z_channels=z_channels)
         self.decoder = Decoder(ch=ch, out_channels=in_channels, ch_mult=ch_mult, num_res_blocks=num_res_blocks, attn_resolutions=attn_resolutions, dropout=dropout, resamp_with_conv=resamp_with_conv, resolution=resolution, z_channels=z_channels)
-        self.loss = CombinedAudioLoss(alpha=0.5)
+        self.loss = CombinedAudioLoss(alpha=0.5, beta=1.0)
 
         self.quant_conv = nn.Conv1d(z_channels, embed_dim*2, 1)
         self.post_quant_conv = nn.Conv1d(embed_dim, z_channels, 1)
@@ -277,7 +278,7 @@ class VAE(pl.LightningModule):
         reconstructions, posterior = self(batch)
 
         # Calculate the combined audio loss
-        loss = self.loss(reconstructions, batch)
+        loss = self.loss(reconstructions, batch, posterior)
         self.log('train_loss', loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
         return loss
         
