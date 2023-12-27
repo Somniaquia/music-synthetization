@@ -38,6 +38,8 @@ class MusicDataset(Dataset):
         audio_path = self.file_paths[idx]
         waveform, sample_rate = torchaudio.load(audio_path)
 
+        waveform = torch.nan_to_num(waveform)
+
         if self.transform:
             waveform = self.transform(waveform)
 

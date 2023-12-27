@@ -1,3 +1,4 @@
+import math
 import os
 import random
 import torch
@@ -42,13 +43,19 @@ class CombinedAudioLoss(nn.Module):
         self.beta = beta # Weight of KL Divergence
 
     def forward(self, y_pred, y_true, posterior):
-        time_loss = self.time_domain_loss(y_pred, y_true)
+        time_loss = self.time_domain_loss(y_pred, y_true)   
         freq_loss = self.frequency_domain_loss(y_pred, y_true)
         reconstruction_loss = (1 - self.alpha) * time_loss + self.alpha * freq_loss
 
         kl_divergence = posterior.kl().mean()
+        print(kl_divergence)
+        print(reconstruction_loss)
 
-        total_loss = reconstruction_loss + self.beta * kl_divergence
+        if math.isnan(kl_divergence):
+            total_loss = reconstruction_loss
+        else:
+            total_loss = reconstruction_loss + self.beta * kl_divergence
+
         return total_loss
     
 if __name__ == "__main__":
