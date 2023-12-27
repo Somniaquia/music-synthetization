@@ -50,7 +50,7 @@ if __name__ == "__main__":
             print("Batch shape:", batch.shape)
             break
 
-        trainer = pl.Trainer(max_epochs=100, precision='32-true', gradient_clip_val=0.5, gradient_clip_algorithm="value", log_every_n_steps=1)
+        trainer = pl.Trainer(max_epochs=100, precision='32-true', gradient_clip_val=0.5, gradient_clip_algorithm="value")
         trainer.fit(model, train_loader, val_loader)
 
     elif option == 'unet':
