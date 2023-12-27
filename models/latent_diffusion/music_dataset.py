@@ -42,5 +42,7 @@ class MusicDataset(Dataset):
 
         if self.transform:
             waveform = self.transform(waveform)
+        
+        print(f"Data: {waveform}")
 
         return waveform
