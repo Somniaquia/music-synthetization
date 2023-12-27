@@ -34,7 +34,7 @@ class FrequencyDomainLoss(nn.Module):
         mag_true = stft_true.abs()
 
         # Compute the L1 loss between the magnitudes
-        loss = self.l1_loss(mag_pred, mag_true) / 10.0
+        loss = self.l1_loss(mag_pred, mag_true)
         print(f"Frequency domain loss: {loss}")
         return loss
     
@@ -51,7 +51,7 @@ class CombinedAudioLoss(nn.Module):
         freq_loss = self.frequency_domain_loss(y_pred, y_true)
         reconstruction_loss = (1 - self.alpha) * time_loss + self.alpha * freq_loss
 
-        kl_divergence = posterior.kl().mean() / 10.0
+        kl_divergence = posterior.kl().mean()
         print(f"KL Divergence loss: {kl_divergence}")
 
         total_loss = reconstruction_loss + self.beta * kl_divergence

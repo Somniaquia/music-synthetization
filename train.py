@@ -52,6 +52,7 @@ if __name__ == "__main__":
             print("Batch shape:", batch.shape)
             break
 
+        torch.set_printoptions(linewidth=200)
         torch.autograd.set_detect_anomaly(True)
 
         trainer = pl.Trainer(max_epochs=100, precision='32-true', gradient_clip_val=0.5, gradient_clip_algorithm="value")
