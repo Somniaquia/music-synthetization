@@ -46,7 +46,7 @@ class CombinedAudioLoss(nn.Module):
         freq_loss = self.frequency_domain_loss(y_pred, y_true)
         reconstruction_loss = (1 - self.alpha) * time_loss + self.alpha * freq_loss
 
-        kl_divergence = posterior.kl().meaan()
+        kl_divergence = posterior.kl().mean()
 
         total_loss = reconstruction_loss + self.beta * kl_divergence
         return total_loss

@@ -283,10 +283,10 @@ class VAE(pl.LightningModule):
         return loss
         
     def validation_step(self, batch, batch_idx):
-        reconstructions, _ = self(batch)
+        reconstructions, posterior = self(batch)
 
         # Calculate the combined audio loss
-        val_loss = self.loss(reconstructions, batch)
+        val_loss = self.loss(reconstructions, batch, posterior)
         self.log('val_loss', val_loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
         return val_loss
     
