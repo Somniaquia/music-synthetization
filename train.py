@@ -3,8 +3,6 @@ from functools import partial
 import os
 import glob
 
-import torch
-
 def get_latest_checkpoint(log_dir='lightning_logs'):
     version_dirs = glob.glob(os.path.join(log_dir, 'version_*'))
 
@@ -40,7 +38,7 @@ if __name__ == "__main__":
         from models.latent_diffusion.music_dataset import MusicDataset, collate_fn
         import pytorch_lightning as pl
 
-        model = VAE(num_res_blocks=1, resolution=resolution, learning_rate=1e-4, z_channels=512)
+        model = VAE(num_res_blocks=1, resolution=resolution, learning_rate=learning_rate, z_channels=512)
         train_set = MusicDataset(root_dir=data_directory)
 
         collate_fn = partial(collate_fn, max_length=resolution)
