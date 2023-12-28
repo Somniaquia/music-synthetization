@@ -16,7 +16,7 @@ class TimeDomainLoss(nn.Module):
     def forward(self, y_pred, y_true):
         loss = self.l1_loss(y_pred, y_true) * 10.0
         
-        print(f"Time domain loss: {loss}")
+        # print(f"Time domain loss: {loss}")
         return loss
 
 class FrequencyDomainLoss(nn.Module):
@@ -35,7 +35,7 @@ class FrequencyDomainLoss(nn.Module):
 
         # Compute the L1 loss between the magnitudes
         loss = self.l1_loss(mag_pred, mag_true)
-        print(f"Frequency domain loss: {loss}")
+        # print(f"Frequency domain loss: {loss}")
         return loss
     
 class CombinedAudioLoss(nn.Module):
@@ -52,7 +52,7 @@ class CombinedAudioLoss(nn.Module):
         reconstruction_loss = (1 - self.alpha) * time_loss + self.alpha * freq_loss
 
         kl_divergence = posterior.kl().mean()
-        print(f"KL Divergence loss: {kl_divergence}")
+        # print(f"KL Divergence loss: {kl_divergence}")
 
         total_loss = reconstruction_loss + self.beta * kl_divergence
 
@@ -83,4 +83,4 @@ if __name__ == "__main__":
     combined_loss = CombinedAudioLoss(alpha=0.5)
 
     loss = combined_loss(waveform_1, waveform_2)
-    print('Combined Audio Loss:', loss.item())
+    # print('Combined Audio Loss:', loss.item())

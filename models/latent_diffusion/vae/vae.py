@@ -280,6 +280,11 @@ class VAE(pl.LightningModule):
         # Calculate the combined audio loss
         loss = self.loss(reconstructions, batch, posterior)
         self.log('train_loss', loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
+        
+        for name, param in self.named_parameters():
+            if param.grad is not None:
+                print(f" - {name} gradient: {param.grad.norm()}")
+
         return loss
         
     def validation_step(self, batch, batch_idx):

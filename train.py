@@ -40,7 +40,7 @@ if __name__ == "__main__":
         from models.latent_diffusion.music_dataset import MusicDataset, collate_fn
         import pytorch_lightning as pl
 
-        model = VAE(num_res_blocks=1, attn_resolutions=[resolution / 2, resolution / 4, resolution / 8], resolution=resolution, learning_rate=1e-4)
+        model = VAE(num_res_blocks=1, resolution=resolution, learning_rate=1e-4, z_channels=512)
         train_set = MusicDataset(root_dir=data_directory)
 
         collate_fn = partial(collate_fn, max_length=resolution)
@@ -51,9 +51,6 @@ if __name__ == "__main__":
         for batch in train_loader:
             print("Batch shape:", batch.shape)
             break
-
-        torch.set_printoptions(linewidth=200)
-        torch.autograd.set_detect_anomaly(True)
 
         trainer = pl.Trainer(max_epochs=100, precision='32-true', gradient_clip_val=0.5, gradient_clip_algorithm="value")
         trainer.fit(model, train_loader, val_loader)
