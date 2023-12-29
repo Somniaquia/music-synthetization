@@ -32,7 +32,7 @@ if __name__ == "__main__":
         plot_spectogram(processed_y, sr)
         
         with torch.no_grad():
-            model = VAE(num_res_blocks=2, resolution=resolution).to(device)
+            model = VAE(num_res_blocks=1, resolution=resolution).to(device)
             model.eval()
 
             model.load_state_dict(torch.load(get_latest_checkpoint())['state_dict'])

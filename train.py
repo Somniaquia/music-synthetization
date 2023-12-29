@@ -31,6 +31,7 @@ if __name__ == "__main__":
     resolution = int(input("Input Resolution: "))
     batch_size = int(input("Batch size: "))
     learning_rate = float(input("Learning rate: "))
+    num_res_blocks = int(input("Resnet blocks per encoder/decoder's sublayers"))
 
     if option == "vae":
         from models.latent_diffusion.vae.vae import VAE
@@ -38,7 +39,7 @@ if __name__ == "__main__":
         from models.latent_diffusion.music_dataset import MusicDataset, collate_fn
         import pytorch_lightning as pl
 
-        model = VAE(num_res_blocks=1, resolution=resolution, learning_rate=learning_rate, z_channels=512)
+        model = VAE(num_res_blocks=num_res_blocks, resolution=resolution, learning_rate=learning_rate, z_channels=512)
         train_set = MusicDataset(root_dir=data_directory)
 
         collate_fn = partial(collate_fn, max_length=resolution)

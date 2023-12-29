@@ -114,8 +114,8 @@ class Encoder(nn.Module):
                 block.append(ResnetBlock(in_channels=block_in, out_channels=block_out, t_emb_channels=self.t_emb_ch, dropout=dropout))
                 block_in = block_out
                 print(curr_res)
-                if curr_res in attn_resolutions:
-                    attn.append(LinearAttention(dim=block_in))
+                # if curr_res in attn_resolutions:
+                attn.append(LinearAttention(dim=block_in))
 
             down = nn.Module()
             down.block = block
@@ -185,8 +185,8 @@ class Decoder(nn.Module):
             for i_block in range(self.num_res_blocks):
                 block.append(ResnetBlock(in_channels=block_in, out_channels=block_out, t_emb_channels=self.t_emb_ch, dropout=dropout))
                 block_in = block_out
-                if curr_res in attn_resolutions:
-                    attn.append(LinearAttention(dim=block_in))
+                # if curr_res in attn_resolutions:
+                attn.append(LinearAttention(dim=block_in))
             up = nn.Module()
             up.block = block
             up.attn = attn
